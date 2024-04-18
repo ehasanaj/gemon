@@ -11,15 +11,5 @@ pub enum GemonMethodType {
     POST,
     DELETE,
     PUT,
-}
-
-impl GemonMethodType {
-    pub fn value(&self) -> String {
-        match self {
-            GemonMethodType::GET => String::from("GET"),
-            GemonMethodType::POST => String::from("POST"),
-            GemonMethodType::DELETE => String::from("DELETE"),
-            GemonMethodType::PUT => String::from("PUT"),
-        }
-    }
+    PATCH,
 }
