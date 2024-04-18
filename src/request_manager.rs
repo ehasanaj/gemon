@@ -12,14 +12,18 @@ pub trait GemonResponse {}
 pub struct RequestManager {}
 
 impl RequestManager {
+    fn build_rest_request(gemon_config: &GemonConfig) -> Box<impl GemonRequest> {
+        Box::new(
+            GemonRestRequestBuilder::new()
+                .set_gemon_method_type(gemon_config.gemon_method_type())
+                .set_url(gemon_config.gemon_url())
+                .build(),
+        )
+    }
+
     pub fn build_request(gemon_config: &GemonConfig) -> Box<impl GemonRequest> {
         match gemon_config.gemon_type() {
-            GemonType::REST => Box::new(
-                GemonRestRequestBuilder::new()
-                    .set_gemon_method_type(gemon_config.gemon_method_type())
-                    .set_url(gemon_config.gemon_url())
-                    .build(),
-            ),
+            GemonType::REST => RequestManager::build_rest_request(gemon_config),
             GemonType::WEBSOCKET => todo!(),
             GemonType::PROTO => todo!(),
         }

@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-
-use reqwest::{IntoUrl, Response};
+use reqwest;
 use serde_json::Value;
 
 use super::GemonRequest;
@@ -44,7 +42,7 @@ impl GemonRestRequestBuilder {
             uri: String::from(
                 self.url
                     .as_ref()
-                    .expect("Url missing when building Rest request!"),
+                    .expect("Uri missing when building Rest request!"),
             ),
         }
     }
@@ -58,17 +56,16 @@ pub struct GemonRestRequest {
 
 impl GemonRequest for GemonRestRequest {
     async fn execute(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let client = reqwest::Client::new();
         let request = match self.gemon_method_type {
-            GemonMethodType::GET => reqwest::get(&self.uri),
-            GemonMethodType::POST => reqwest::get(&self.uri),
-            GemonMethodType::DELETE => reqwest::get(&self.uri),
-            GemonMethodType::PUT => reqwest::get(&self.uri),
+            GemonMethodType::GET => client.get(&self.uri),
+            GemonMethodType::POST => client.post(&self.uri),
+            GemonMethodType::DELETE => client.delete(&self.uri),
+            GemonMethodType::PUT => client.put(&self.uri),
+            GemonMethodType::PATCH => client.patch(&self.uri),
         };
 
-        let response_bytes = request
-            .await?
-            .bytes()
-            .await?;
+        let response_bytes = request.send().await?.bytes().await?;
 
         let response: Value = serde_json::from_slice(&response_bytes)?;
         let pretty_response = serde_json::to_string_pretty(&response)?;

@@ -8,6 +8,40 @@ pub mod arguments;
 pub mod parser;
 pub mod types;
 
+struct GemonConfigBuilder {
+    gemon_type: GemonType,
+    gemon_method_type: Option<GemonMethodType>,
+    url: Option<String>,
+}
+
+impl GemonConfigBuilder {
+    fn new() -> GemonConfigBuilder {
+        GemonConfigBuilder {
+            gemon_type: GemonType::REST,
+            gemon_method_type: None,
+            url: None,
+        }
+    }
+
+    fn process_argument(&mut self, argument: &GemonArgument) {
+        match argument {
+            GemonArgument::Type(t) => self.gemon_type = t.clone(),
+            GemonArgument::Method {
+                gemon_method_type: t,
+            } => self.gemon_method_type = Some(t.clone()),
+            GemonArgument::Uri(t) => self.url = Some(String::from(t)),
+        }
+    }
+
+    fn build(self) -> GemonConfig {
+        GemonConfig {
+            gemon_type: self.gemon_type,
+            gemon_method_type: self.gemon_method_type,
+            url: self.url,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct GemonConfig {
     gemon_type: GemonType,
@@ -16,27 +50,15 @@ pub struct GemonConfig {
 }
 
 impl GemonConfig {
-    pub fn new(gemon_arguments: &GemonArguments) -> Result<GemonConfig, io::Error> {
-        let mut gemon_type = GemonType::REST;
-        let mut gemon_method_type = None;
-        let mut url = None;
+    pub fn new(gemon_arguments: GemonArguments) -> Result<GemonConfig, io::Error> {
+        let mut builder = GemonConfigBuilder::new();
 
         gemon_arguments
             .arguments()
             .into_iter()
-            .for_each(|argument| match argument {
-                GemonArgument::GemonType(t) => gemon_type = t.clone(),
-                GemonArgument::Method {
-                    gemon_method_type: t,
-                } => gemon_method_type = Some(t.clone()),
-                GemonArgument::Uri(t) => url = Some(String::from(t)),
-            });
+            .for_each(|argument| builder.process_argument(argument));
 
-        let config = GemonConfig {
-            gemon_type,
-            gemon_method_type,
-            url: url,
-        };
+        let config = builder.build();
         Ok(config)
     }
 
@@ -45,10 +67,11 @@ impl GemonConfig {
     }
 
     pub fn gemon_method_type(&self) -> GemonMethodType {
-        self.gemon_method_type.expect("Gemon Method Type missing")
+        self.gemon_method_type
+            .expect("-t=[type] or --type=[type] expected")
     }
 
     pub fn gemon_url(&self) -> String {
-        String::from(self.url.as_ref().expect("Url expected"))
+        String::from(self.url.as_ref().expect("-u=[uri] or --uri=[uri] expected"))
     }
 }
