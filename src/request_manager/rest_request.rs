@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use reqwest::{
     self,
-    header::{self, HeaderMap},
+    header::{self, HeaderMap, ACCEPT, CONTENT_TYPE},
 };
 use serde_json::Value;
 
@@ -13,6 +13,7 @@ pub struct GemonRestRequestBuilder {
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
     headers: HeaderMap,
+    body: Option<String>,
 }
 
 impl GemonRestRequestBuilder {
@@ -21,6 +22,7 @@ impl GemonRestRequestBuilder {
             gemon_method_type: None,
             url: None,
             headers: HeaderMap::new(),
+            body: None,
         }
     }
 
@@ -53,6 +55,13 @@ impl GemonRestRequestBuilder {
         GemonRestRequestBuilder { headers, ..self }
     }
 
+    pub fn set_body(self, body: Option<String>) -> GemonRestRequestBuilder {
+        GemonRestRequestBuilder {
+            body,
+            ..self
+        }
+    }
+
     pub fn build(&self) -> GemonRestRequest {
         GemonRestRequest {
             gemon_method_type: self
@@ -64,6 +73,7 @@ impl GemonRestRequestBuilder {
                     .expect("Uri missing when building Rest request!"),
             ),
             headers: self.headers.clone(),
+            body: self.body.clone(),
         }
     }
 }
@@ -73,12 +83,13 @@ pub struct GemonRestRequest {
     gemon_method_type: GemonMethodType,
     uri: String,
     headers: HeaderMap,
+    body: Option<String>,
 }
 
 impl GemonRequest for GemonRestRequest {
     async fn execute(&self) -> Result<(), Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
-        let request = match self.gemon_method_type {
+        let mut request = match self.gemon_method_type {
             GemonMethodType::GET => client.get(&self.uri),
             GemonMethodType::POST => client.post(&self.uri),
             GemonMethodType::DELETE => client.delete(&self.uri),
@@ -86,18 +97,23 @@ impl GemonRequest for GemonRestRequest {
             GemonMethodType::PATCH => client.patch(&self.uri),
         };
 
-        let response = request
+        request = request
             .headers(self.headers.clone())
-            .send()
-            .await?;
+            .header(CONTENT_TYPE, "application/json")
+            .header(ACCEPT, "application/json");
+
+        if let Some(body) = self.body.as_ref() {
+            request = request.body(body.to_string());
+        }
+
+        let response = request.send().await?;
 
         let status = response.error_for_status_ref();
         if let Some(err) = status.err() {
-           panic!("Request failed with error code {:?}", err.status().unwrap());
+            panic!("Request failed with error code {:?}", err.status().unwrap());
         }
-            
-        let response_bytes = response.bytes()
-            .await?;
+
+        let response_bytes = response.bytes().await?;
 
         let response_value: Value = serde_json::from_slice(&response_bytes)?;
         let pretty_response = serde_json::to_string_pretty(&response_value)?;

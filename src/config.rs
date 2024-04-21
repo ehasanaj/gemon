@@ -13,6 +13,7 @@ struct GemonConfigBuilder {
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
     headers: HashMap<String, String>,
+    body: Option<String>,
 }
 
 impl GemonConfigBuilder {
@@ -22,6 +23,7 @@ impl GemonConfigBuilder {
             gemon_method_type: None,
             url: None,
             headers: HashMap::new(),
+            body: None,
         }
     }
 
@@ -31,10 +33,11 @@ impl GemonConfigBuilder {
             GemonArgument::Method {
                 gemon_method_type: t,
             } => self.gemon_method_type = Some(t.clone()),
-            GemonArgument::Uri(t) => self.url = Some(String::from(t)),
+            GemonArgument::Uri(t) => self.url = Some(t.to_string()),
             GemonArgument::Header(key, value) => {
                 self.headers.insert(key.clone(), value.clone());
             }
+            GemonArgument::Body(b) => self.body = Some(b.to_string()),
         }
     }
 
@@ -44,6 +47,7 @@ impl GemonConfigBuilder {
             gemon_method_type: self.gemon_method_type,
             url: self.url,
             headers: self.headers,
+            body: self.body,
         }
     }
 }
@@ -54,6 +58,7 @@ pub struct GemonConfig {
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
     headers: HashMap<String, String>,
+    body: Option<String>,
 }
 
 impl GemonConfig {
@@ -84,5 +89,9 @@ impl GemonConfig {
 
     pub fn gemon_headers(&self) -> &HashMap<String, String> {
         &self.headers
+    }
+
+    pub fn gemon_body(&self) -> Option<String> {
+            self.body.clone()
     }
 }

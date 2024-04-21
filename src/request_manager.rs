@@ -18,6 +18,7 @@ impl RequestManager {
                 .set_gemon_method_type(gemon_config.gemon_method_type())
                 .set_url(gemon_config.gemon_url())
                 .set_headers(gemon_config.gemon_headers())
+                .set_body(gemon_config.gemon_body())
                 .build(),
         )
     }

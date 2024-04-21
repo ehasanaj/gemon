@@ -1,9 +1,9 @@
 use crate::config::arguments::GemonArgument;
 use crate::config::types::{GemonMethodType, GemonType};
 
-fn uri_parser(s: &str, i: usize) -> Option<GemonArgument> {
-    let uri = &s[i..];
-    Some(GemonArgument::Uri(uri.to_string()))
+fn arg_parser(s: &str, i: usize) -> String {
+    let arg = &s[i..];
+    arg.to_string()
 }
 
 fn header_parser(s: &str, i: usize) -> Option<GemonArgument> {
@@ -45,10 +45,12 @@ impl GemonArgumentParser for String {
             "-m=PATCH" | "--method=PATCH" => Some(GemonArgument::Method {
                 gemon_method_type: GemonMethodType::PATCH,
             }),
-            s if s.starts_with("-u=") => uri_parser(s, 3),
-            s if s.starts_with("--uri=") => uri_parser(s, 6),
+            s if s.starts_with("-u=") => Some(GemonArgument::Uri(arg_parser(s, 3))),
+            s if s.starts_with("--uri=") => Some(GemonArgument::Uri(arg_parser(s, 6))),
             s if s.starts_with("-h=") => header_parser(s, 3),
             s if s.starts_with("--header=") => header_parser(s, 9),
+            s if s.starts_with("-b=") => Some(GemonArgument::Body(arg_parser(s, 3))),
+            s if s.starts_with("--body=") => Some(GemonArgument::Body(arg_parser(s, 6))),
             _ => None,
         }
     }
