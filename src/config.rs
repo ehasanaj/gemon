@@ -2,7 +2,7 @@ use crate::config::{
     arguments::{GemonArgument, GemonArguments},
     types::{GemonMethodType, GemonType},
 };
-use std::io;
+use std::{collections::HashMap, io};
 
 pub mod arguments;
 pub mod parser;
@@ -12,6 +12,7 @@ struct GemonConfigBuilder {
     gemon_type: GemonType,
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
+    headers: HashMap<String, String>,
 }
 
 impl GemonConfigBuilder {
@@ -20,6 +21,7 @@ impl GemonConfigBuilder {
             gemon_type: GemonType::REST,
             gemon_method_type: None,
             url: None,
+            headers: HashMap::new(),
         }
     }
 
@@ -30,6 +32,9 @@ impl GemonConfigBuilder {
                 gemon_method_type: t,
             } => self.gemon_method_type = Some(t.clone()),
             GemonArgument::Uri(t) => self.url = Some(String::from(t)),
+            GemonArgument::Header(key, value) => {
+                self.headers.insert(key.clone(), value.clone());
+            }
         }
     }
 
@@ -38,6 +43,7 @@ impl GemonConfigBuilder {
             gemon_type: self.gemon_type,
             gemon_method_type: self.gemon_method_type,
             url: self.url,
+            headers: self.headers,
         }
     }
 }
@@ -47,6 +53,7 @@ pub struct GemonConfig {
     gemon_type: GemonType,
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
+    headers: HashMap<String, String>,
 }
 
 impl GemonConfig {
@@ -73,5 +80,9 @@ impl GemonConfig {
 
     pub fn gemon_url(&self) -> String {
         String::from(self.url.as_ref().expect("-u=[uri] or --uri=[uri] expected"))
+    }
+
+    pub fn gemon_headers(&self) -> &HashMap<String, String> {
+        &self.headers
     }
 }

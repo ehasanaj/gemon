@@ -7,6 +7,7 @@ pub enum GemonArgument {
     Type(GemonType),
     Method { gemon_method_type: GemonMethodType },
     Uri(String),
+    Header(String, String),
 }
 
 #[derive(Debug)]

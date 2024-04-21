@@ -17,6 +17,7 @@ impl RequestManager {
             GemonRestRequestBuilder::new()
                 .set_gemon_method_type(gemon_config.gemon_method_type())
                 .set_url(gemon_config.gemon_url())
+                .set_headers(gemon_config.gemon_headers())
                 .build(),
         )
     }
