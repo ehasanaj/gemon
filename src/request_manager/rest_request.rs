@@ -1,12 +1,9 @@
 use std::collections::HashMap;
-
 use reqwest::{
     self,
     header::{self, HeaderMap, ACCEPT, CONTENT_TYPE},
 };
-use serde_json::Value;
-
-use super::GemonRequest;
+use crate::{constants, request_manager::{GemonRequest, GemonResponse}};
 use crate::config::types::GemonMethodType;
 
 pub struct GemonRestRequestBuilder {
@@ -95,7 +92,7 @@ pub struct GemonRestRequest {
 }
 
 impl GemonRequest for GemonRestRequest {
-    async fn execute(&self) -> Result<(), Box<dyn std::error::Error>> {
+    async fn execute(&self) -> Result<GemonResponse, Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
         let mut request = match self.gemon_method_type {
             GemonMethodType::GET => client.get(&self.uri),
@@ -106,8 +103,8 @@ impl GemonRequest for GemonRestRequest {
         };
 
         request = request
-            .header(CONTENT_TYPE, "application/json")
-            .header(ACCEPT, "application/json")
+            .header(CONTENT_TYPE, constants::DEFAULT_CONTENT_TYPE)
+            .header(ACCEPT, constants::DEFAULT_ACCEPT)
             .headers(self.headers.clone());
         
         if self.form_data.len() > 0 {
@@ -126,12 +123,6 @@ impl GemonRequest for GemonRestRequest {
         }
 
         let response_bytes = response.bytes().await?;
-
-        let response_value: Value = serde_json::from_slice(&response_bytes)?;
-        let pretty_response = serde_json::to_string_pretty(&response_value)?;
-
-        println!("{}", pretty_response);
-
-        Ok(())
+        Ok(GemonResponse { data: response_bytes })
     }
 }

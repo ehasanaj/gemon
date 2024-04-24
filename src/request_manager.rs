@@ -1,13 +1,22 @@
-use crate::config::{types::GemonType, GemonConfig};
 
-use self::rest_request::GemonRestRequestBuilder;
+use bytes::Bytes;
+use crate::config::{types::GemonType, GemonConfig};
+use crate::request_manager::rest_request::GemonRestRequestBuilder;
 
 mod rest_request;
 
 pub trait GemonRequest {
-    async fn execute(&self) -> Result<(), Box<dyn std::error::Error>>; //TODO: return GemonResponse here instead
+    async fn execute(&self) -> Result<GemonResponse, Box<dyn std::error::Error>>; //TODO: return GemonResponse here instead
 }
-pub trait GemonResponse {}
+pub struct GemonResponse {
+    data: Bytes,
+}
+
+impl GemonResponse {
+    pub fn data(&self) -> &Bytes {
+        &self.data
+    }
+}
 
 pub struct RequestManager {}
 
