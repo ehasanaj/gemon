@@ -4,12 +4,15 @@ use crate::config::{
 };
 use std::{collections::HashMap, io};
 
+use self::types::GemonPrinter;
+
 pub mod arguments;
 pub mod parser;
 pub mod types;
 
 struct GemonConfigBuilder {
     gemon_type: GemonType,
+    gemon_printer: GemonPrinter,
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
     headers: HashMap<String, String>,
@@ -21,6 +24,7 @@ impl GemonConfigBuilder {
     fn new() -> GemonConfigBuilder {
         GemonConfigBuilder {
             gemon_type: GemonType::REST,
+            gemon_printer: GemonPrinter::Terminal,
             gemon_method_type: None,
             url: None,
             headers: HashMap::new(),
@@ -49,6 +53,7 @@ impl GemonConfigBuilder {
     fn build(self) -> GemonConfig {
         GemonConfig {
             gemon_type: self.gemon_type,
+            gemon_printer: self.gemon_printer,
             gemon_method_type: self.gemon_method_type,
             url: self.url,
             headers: self.headers,
@@ -61,6 +66,7 @@ impl GemonConfigBuilder {
 #[derive(Debug)]
 pub struct GemonConfig {
     gemon_type: GemonType,
+    gemon_printer: GemonPrinter,
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
     headers: HashMap<String, String>,
@@ -83,6 +89,10 @@ impl GemonConfig {
 
     pub fn gemon_type(&self) -> &GemonType {
         &self.gemon_type
+    }
+
+    pub fn gemon_printer(&self) -> &GemonPrinter {
+        &self.gemon_printer
     }
 
     pub fn gemon_method_type(&self) -> GemonMethodType {

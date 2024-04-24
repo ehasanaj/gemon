@@ -1,10 +1,13 @@
-use std::collections::HashMap;
+use crate::config::types::GemonMethodType;
+use crate::{
+    constants,
+    request_builder::{GemonRequest, GemonResponse},
+};
 use reqwest::{
     self,
     header::{self, HeaderMap, ACCEPT, CONTENT_TYPE},
 };
-use crate::{constants, request_builder::{GemonRequest, GemonResponse}};
-use crate::config::types::GemonMethodType;
+use std::collections::HashMap;
 
 pub struct GemonRestRequestBuilder {
     gemon_method_type: Option<GemonMethodType>,
@@ -106,7 +109,7 @@ impl GemonRequest for GemonRestRequest {
             .header(CONTENT_TYPE, constants::DEFAULT_CONTENT_TYPE)
             .header(ACCEPT, constants::DEFAULT_ACCEPT)
             .headers(self.headers.clone());
-        
+
         if self.form_data.len() > 0 {
             request = request.form(&self.form_data);
         }
@@ -123,6 +126,8 @@ impl GemonRequest for GemonRestRequest {
         }
 
         let response_bytes = response.bytes().await?;
-        Ok(GemonResponse { data: response_bytes })
+        Ok(GemonResponse {
+            data: response_bytes,
+        })
     }
 }
