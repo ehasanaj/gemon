@@ -9,6 +9,7 @@ pub enum GemonArgument {
     Uri(String),
     Header(String, String),
     Body(String),
+    FormData(String, String),
 }
 
 #[derive(Debug)]

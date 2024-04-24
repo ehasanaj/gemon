@@ -19,6 +19,7 @@ impl RequestManager {
                 .set_url(gemon_config.gemon_url())
                 .set_headers(gemon_config.gemon_headers())
                 .set_body(gemon_config.gemon_body())
+                .set_form_data(gemon_config.gemon_form_data())
                 .build(),
         )
     }

@@ -14,6 +14,7 @@ pub struct GemonRestRequestBuilder {
     url: Option<String>,
     headers: HeaderMap,
     body: Option<String>,
+    form_data: HashMap<String, String>,
 }
 
 impl GemonRestRequestBuilder {
@@ -23,6 +24,7 @@ impl GemonRestRequestBuilder {
             url: None,
             headers: HeaderMap::new(),
             body: None,
+            form_data: HashMap::new(),
         }
     }
 
@@ -56,8 +58,12 @@ impl GemonRestRequestBuilder {
     }
 
     pub fn set_body(self, body: Option<String>) -> GemonRestRequestBuilder {
+        GemonRestRequestBuilder { body, ..self }
+    }
+
+    pub fn set_form_data(self, form_data: &HashMap<String, String>) -> GemonRestRequestBuilder {
         GemonRestRequestBuilder {
-            body,
+            form_data: form_data.clone(),
             ..self
         }
     }
@@ -74,6 +80,7 @@ impl GemonRestRequestBuilder {
             ),
             headers: self.headers.clone(),
             body: self.body.clone(),
+            form_data: self.form_data.clone(),
         }
     }
 }
@@ -84,6 +91,7 @@ pub struct GemonRestRequest {
     uri: String,
     headers: HeaderMap,
     body: Option<String>,
+    form_data: HashMap<String, String>,
 }
 
 impl GemonRequest for GemonRestRequest {
@@ -98,9 +106,13 @@ impl GemonRequest for GemonRestRequest {
         };
 
         request = request
-            .headers(self.headers.clone())
             .header(CONTENT_TYPE, "application/json")
-            .header(ACCEPT, "application/json");
+            .header(ACCEPT, "application/json")
+            .headers(self.headers.clone());
+        
+        if self.form_data.len() > 0 {
+            request = request.form(&self.form_data);
+        }
 
         if let Some(body) = self.body.as_ref() {
             request = request.body(body.to_string());

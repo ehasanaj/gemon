@@ -14,6 +14,7 @@ struct GemonConfigBuilder {
     url: Option<String>,
     headers: HashMap<String, String>,
     body: Option<String>,
+    form_data: HashMap<String, String>,
 }
 
 impl GemonConfigBuilder {
@@ -24,6 +25,7 @@ impl GemonConfigBuilder {
             url: None,
             headers: HashMap::new(),
             body: None,
+            form_data: HashMap::new(),
         }
     }
 
@@ -38,6 +40,9 @@ impl GemonConfigBuilder {
                 self.headers.insert(key.clone(), value.clone());
             }
             GemonArgument::Body(b) => self.body = Some(b.to_string()),
+            GemonArgument::FormData(key, value) => {
+                self.form_data.insert(key.clone(), value.clone());
+            }
         }
     }
 
@@ -48,6 +53,7 @@ impl GemonConfigBuilder {
             url: self.url,
             headers: self.headers,
             body: self.body,
+            form_data: self.form_data,
         }
     }
 }
@@ -59,6 +65,7 @@ pub struct GemonConfig {
     url: Option<String>,
     headers: HashMap<String, String>,
     body: Option<String>,
+    form_data: HashMap<String, String>,
 }
 
 impl GemonConfig {
@@ -92,6 +99,10 @@ impl GemonConfig {
     }
 
     pub fn gemon_body(&self) -> Option<String> {
-            self.body.clone()
+        self.body.clone()
+    }
+
+    pub fn gemon_form_data(&self) -> &HashMap<String, String> {
+        &self.form_data
     }
 }

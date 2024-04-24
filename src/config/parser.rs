@@ -1,23 +1,23 @@
 use crate::config::arguments::GemonArgument;
 use crate::config::types::{GemonMethodType, GemonType};
 
-fn arg_parser(s: &str, i: usize) -> String {
+fn simple_arg_parser(s: &str, i: usize) -> String {
     let arg = &s[i..];
     arg.to_string()
 }
 
-fn header_parser(s: &str, i: usize) -> Option<GemonArgument> {
-    let header_key_value = &s[i..];
-    let header: Vec<&str> = header_key_value.split(':').collect();
-    let key = header
+fn key_value_pair_arg_parser(s: &str, i: usize) -> (String, String) {
+    let key_value = &s[i..];
+    let arg: Vec<&str> = key_value.split(':').collect();
+    let key = arg
         .get(0)
-        .expect("header key not provided correctly e.x `-h=key:value`")
+        .expect("arg key not provided correctly e.x `-h=key:value`")
         .to_string();
-    let value = header
+    let value = arg
         .get(1)
-        .expect("header value not provided correctly e.x `-h=key:value`")
+        .expect("arg value not provided correctly e.x `-h=key:value`")
         .to_string();
-    Some(GemonArgument::Header(key, value))
+    (key, value)
 }
 
 pub trait GemonArgumentParser {
@@ -45,12 +45,26 @@ impl GemonArgumentParser for String {
             "-m=PATCH" | "--method=PATCH" => Some(GemonArgument::Method {
                 gemon_method_type: GemonMethodType::PATCH,
             }),
-            s if s.starts_with("-u=") => Some(GemonArgument::Uri(arg_parser(s, 3))),
-            s if s.starts_with("--uri=") => Some(GemonArgument::Uri(arg_parser(s, 6))),
-            s if s.starts_with("-h=") => header_parser(s, 3),
-            s if s.starts_with("--header=") => header_parser(s, 9),
-            s if s.starts_with("-b=") => Some(GemonArgument::Body(arg_parser(s, 3))),
-            s if s.starts_with("--body=") => Some(GemonArgument::Body(arg_parser(s, 6))),
+            s if s.starts_with("-u=") => Some(GemonArgument::Uri(simple_arg_parser(s, 3))),
+            s if s.starts_with("--uri=") => Some(GemonArgument::Uri(simple_arg_parser(s, 6))),
+            s if s.starts_with("-h=") => {
+                let arg = key_value_pair_arg_parser(s, 3);
+                Some(GemonArgument::Header(arg.0, arg.1))
+            }
+            s if s.starts_with("--header=") => {
+                let arg = key_value_pair_arg_parser(s, 9);
+                Some(GemonArgument::Header(arg.0, arg.1))
+            }
+            s if s.starts_with("-b=") => Some(GemonArgument::Body(simple_arg_parser(s, 3))),
+            s if s.starts_with("--body=") => Some(GemonArgument::Body(simple_arg_parser(s, 6))),
+            s if s.starts_with("-fd=") => {
+                let arg = key_value_pair_arg_parser(s, 4);
+                Some(GemonArgument::FormData(arg.0, arg.1))
+            }
+            s if s.starts_with("--form-data=") => {
+                let arg = key_value_pair_arg_parser(s, 12);
+                Some(GemonArgument::FormData(arg.0, arg.1))
+            }
             _ => None,
         }
     }
