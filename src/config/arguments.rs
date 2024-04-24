@@ -10,6 +10,7 @@ pub enum GemonArgument {
     Header(String, String),
     Body(String),
     FormData(String, String),
+    ResponseFilePath(String),
 }
 
 #[derive(Debug)]

@@ -12,24 +12,24 @@ pub mod types;
 
 struct GemonConfigBuilder {
     gemon_type: GemonType,
-    gemon_printer: GemonPrinter,
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
     headers: HashMap<String, String>,
     body: Option<String>,
     form_data: HashMap<String, String>,
+    response_file_path: Option<String>,
 }
 
 impl GemonConfigBuilder {
     fn new() -> GemonConfigBuilder {
         GemonConfigBuilder {
             gemon_type: GemonType::REST,
-            gemon_printer: GemonPrinter::Terminal,
             gemon_method_type: None,
             url: None,
             headers: HashMap::new(),
             body: None,
             form_data: HashMap::new(),
+            response_file_path: None,
         }
     }
 
@@ -47,18 +47,23 @@ impl GemonConfigBuilder {
             GemonArgument::FormData(key, value) => {
                 self.form_data.insert(key.clone(), value.clone());
             }
+            GemonArgument::ResponseFilePath(f) => self.response_file_path = Some(f.to_string()),
         }
     }
 
     fn build(self) -> GemonConfig {
         GemonConfig {
             gemon_type: self.gemon_type,
-            gemon_printer: self.gemon_printer,
+            gemon_printer: match self.response_file_path {
+                Some(_) => GemonPrinter::File,
+                None => GemonPrinter::Terminal,
+            },
             gemon_method_type: self.gemon_method_type,
             url: self.url,
             headers: self.headers,
             body: self.body,
             form_data: self.form_data,
+            response_file_path: self.response_file_path.unwrap_or_default(),
         }
     }
 }
@@ -72,6 +77,7 @@ pub struct GemonConfig {
     headers: HashMap<String, String>,
     body: Option<String>,
     form_data: HashMap<String, String>,
+    response_file_path: String,
 }
 
 impl GemonConfig {
@@ -114,5 +120,9 @@ impl GemonConfig {
 
     pub fn gemon_form_data(&self) -> &HashMap<String, String> {
         &self.form_data
+    }
+
+    pub fn gemon_response_file_path(&self) -> String {
+        self.response_file_path.clone()
     }
 }

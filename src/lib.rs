@@ -1,4 +1,3 @@
-use crate::printer::Printer;
 use crate::{
     config::{arguments::GemonArguments, GemonConfig},
     printer::PrinterBuilder,

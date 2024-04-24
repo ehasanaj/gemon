@@ -64,7 +64,9 @@ impl GemonArgumentParser for String {
             s if s.starts_with("--form-data=") => {
                 let arg = key_value_pair_arg_parser(s, 12);
                 Some(GemonArgument::FormData(arg.0, arg.1))
-            }
+            },
+            s if s.starts_with("-rf=") => Some(GemonArgument::ResponseFilePath(simple_arg_parser(s, 4))),
+            s if s.starts_with("--response-file=") => Some(GemonArgument::ResponseFilePath(simple_arg_parser(s, 16))),
             _ => None,
         }
     }
