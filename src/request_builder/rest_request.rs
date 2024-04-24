@@ -3,7 +3,7 @@ use reqwest::{
     self,
     header::{self, HeaderMap, ACCEPT, CONTENT_TYPE},
 };
-use crate::{constants, request_manager::{GemonRequest, GemonResponse}};
+use crate::{constants, request_builder::{GemonRequest, GemonResponse}};
 use crate::config::types::GemonMethodType;
 
 pub struct GemonRestRequestBuilder {

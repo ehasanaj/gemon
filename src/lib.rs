@@ -2,17 +2,17 @@ use serde_json::Value;
 
 use crate::{
     config::{arguments::GemonArguments, GemonConfig},
-    request_manager::{GemonRequest, RequestManager},
+    request_builder::{GemonRequest, RequestBuilder},
 };
 
 mod config;
-mod request_manager;
+mod request_builder;
 mod constants;
 
 pub async fn run(args: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     let gemon_arguments = GemonArguments::new(args)?;
     let gemon_config = GemonConfig::new(gemon_arguments)?;
-    let request = RequestManager::build_request(&gemon_config);
+    let request = RequestBuilder::build(&gemon_config);
     let response = request.execute().await?;
     
     //TODO insert below logic in a printer functionality

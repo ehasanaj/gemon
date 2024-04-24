@@ -1,7 +1,7 @@
 
 use bytes::Bytes;
 use crate::config::{types::GemonType, GemonConfig};
-use crate::request_manager::rest_request::GemonRestRequestBuilder;
+use crate::request_builder::rest_request::GemonRestRequestBuilder;
 
 mod rest_request;
 
@@ -18,9 +18,9 @@ impl GemonResponse {
     }
 }
 
-pub struct RequestManager {}
+pub struct RequestBuilder {}
 
-impl RequestManager {
+impl RequestBuilder {
     fn build_rest_request(gemon_config: &GemonConfig) -> Box<impl GemonRequest> {
         Box::new(
             GemonRestRequestBuilder::new()
@@ -33,9 +33,9 @@ impl RequestManager {
         )
     }
 
-    pub fn build_request(gemon_config: &GemonConfig) -> Box<impl GemonRequest> {
+    pub fn build(gemon_config: &GemonConfig) -> Box<impl GemonRequest> {
         match gemon_config.gemon_type() {
-            GemonType::REST => RequestManager::build_rest_request(gemon_config),
+            GemonType::REST => RequestBuilder::build_rest_request(gemon_config),
             GemonType::WEBSOCKET => todo!(),
             GemonType::PROTO => todo!(),
         }
