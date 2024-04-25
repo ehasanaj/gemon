@@ -1,3 +1,11 @@
+use serde_derive::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GemonScenario {
+    Request,
+    ProjectSetup,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GemonType {
     REST,
@@ -5,7 +13,7 @@ pub enum GemonType {
     PROTO,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GemonMethodType {
     GET,
     POST,

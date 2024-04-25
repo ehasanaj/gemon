@@ -2,7 +2,7 @@ use crate::config::{types::GemonType, GemonConfig};
 use crate::request_builder::rest_request::{GemonRestRequest, GemonRestRequestBuilder};
 use bytes::Bytes;
 
-mod rest_request;
+pub mod rest_request;
 
 pub trait GemonRequest {
     async fn execute(&self) -> Result<GemonResponse, Box<dyn std::error::Error>>;

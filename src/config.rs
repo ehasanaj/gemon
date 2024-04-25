@@ -4,13 +4,14 @@ use crate::config::{
 };
 use std::{collections::HashMap, io};
 
-use self::types::GemonPrinter;
+use self::types::{GemonPrinter, GemonScenario};
 
 pub mod arguments;
 pub mod parser;
 pub mod types;
 
 struct GemonConfigBuilder {
+    gemon_scenario: GemonScenario,
     gemon_type: GemonType,
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
@@ -23,6 +24,7 @@ struct GemonConfigBuilder {
 impl GemonConfigBuilder {
     fn new() -> GemonConfigBuilder {
         GemonConfigBuilder {
+            gemon_scenario: GemonScenario::Request,
             gemon_type: GemonType::REST,
             gemon_method_type: None,
             url: None,
@@ -48,11 +50,13 @@ impl GemonConfigBuilder {
                 self.form_data.insert(key.clone(), value.clone());
             }
             GemonArgument::ResponseFilePath(f) => self.response_file_path = Some(f.to_string()),
+            GemonArgument::ProjectSetup => self.gemon_scenario = GemonScenario::ProjectSetup,
         }
     }
 
     fn build(self) -> GemonConfig {
         GemonConfig {
+            gemon_scenario: self.gemon_scenario,
             gemon_type: self.gemon_type,
             gemon_printer: match self.response_file_path {
                 Some(_) => GemonPrinter::File,
@@ -70,6 +74,7 @@ impl GemonConfigBuilder {
 
 #[derive(Debug)]
 pub struct GemonConfig {
+    gemon_scenario: GemonScenario,
     gemon_type: GemonType,
     gemon_printer: GemonPrinter,
     gemon_method_type: Option<GemonMethodType>,
@@ -81,7 +86,7 @@ pub struct GemonConfig {
 }
 
 impl GemonConfig {
-    pub fn new(gemon_arguments: GemonArguments) -> Result<GemonConfig, io::Error> {
+    pub fn new(gemon_arguments: &GemonArguments) -> Result<GemonConfig, io::Error> {
         let mut builder = GemonConfigBuilder::new();
 
         gemon_arguments
@@ -91,6 +96,10 @@ impl GemonConfig {
 
         let config = builder.build();
         Ok(config)
+    }
+
+    pub fn gemon_scenario(&self) -> &GemonScenario {
+        &self.gemon_scenario
     }
 
     pub fn gemon_type(&self) -> &GemonType {

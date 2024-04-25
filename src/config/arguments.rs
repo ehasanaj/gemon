@@ -11,6 +11,7 @@ pub enum GemonArgument {
     Body(String),
     FormData(String, String),
     ResponseFilePath(String),
+    ProjectSetup,
 }
 
 #[derive(Debug)]

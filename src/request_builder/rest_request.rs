@@ -7,12 +7,30 @@ use reqwest::{
     self,
     header::{self, HeaderMap, ACCEPT, CONTENT_TYPE},
 };
+use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+trait HeaderMapConverter {
+    fn to_header_map(self) -> HeaderMap;
+}
+
+impl HeaderMapConverter for HashMap<String, String> {
+    fn to_header_map(self) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for (key, value) in self {
+            headers.insert(
+                header::HeaderName::from_bytes(key.as_bytes()).unwrap(),
+                header::HeaderValue::from_str(&value).unwrap(),
+            );
+        }
+        headers
+    }
+}
 
 pub struct GemonRestRequestBuilder {
     gemon_method_type: Option<GemonMethodType>,
     url: Option<String>,
-    headers: HeaderMap,
+    headers: HashMap<String, String>,
     body: Option<String>,
     form_data: HashMap<String, String>,
 }
@@ -22,7 +40,7 @@ impl GemonRestRequestBuilder {
         GemonRestRequestBuilder {
             gemon_method_type: None,
             url: None,
-            headers: HeaderMap::new(),
+            headers: HashMap::new(),
             body: None,
             form_data: HashMap::new(),
         }
@@ -45,16 +63,11 @@ impl GemonRestRequestBuilder {
         }
     }
 
-    pub fn set_headers(self, headers_map: &HashMap<String, String>) -> GemonRestRequestBuilder {
-        let mut headers = HeaderMap::new();
-        for (key, value) in headers_map {
-            headers.insert(
-                header::HeaderName::from_bytes(key.as_bytes()).unwrap(),
-                header::HeaderValue::from_str(&value).unwrap(),
-            );
+    pub fn set_headers(self, headers: &HashMap<String, String>) -> GemonRestRequestBuilder {
+        GemonRestRequestBuilder {
+            headers: headers.clone(),
+            ..self
         }
-
-        GemonRestRequestBuilder { headers, ..self }
     }
 
     pub fn set_body(self, body: Option<String>) -> GemonRestRequestBuilder {
@@ -85,11 +98,11 @@ impl GemonRestRequestBuilder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GemonRestRequest {
     gemon_method_type: GemonMethodType,
     uri: String,
-    headers: HeaderMap,
+    headers: HashMap<String, String>,
     body: Option<String>,
     form_data: HashMap<String, String>,
 }
@@ -108,7 +121,7 @@ impl GemonRequest for GemonRestRequest {
         request = request
             .header(CONTENT_TYPE, constants::DEFAULT_CONTENT_TYPE)
             .header(ACCEPT, constants::DEFAULT_ACCEPT)
-            .headers(self.headers.clone());
+            .headers(self.headers.clone().to_header_map());
 
         if self.form_data.len() > 0 {
             request = request.form(&self.form_data);

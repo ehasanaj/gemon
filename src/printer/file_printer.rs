@@ -10,7 +10,9 @@ pub struct FilePrinter {
 
 impl FilePrinter {
     pub fn new() -> FilePrinter {
-        FilePrinter { file_path: String::new() }
+        FilePrinter {
+            file_path: String::new(),
+        }
     }
 
     pub fn set_file_path(&mut self, file_path: &str) {
