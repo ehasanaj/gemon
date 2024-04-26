@@ -26,7 +26,7 @@ impl Request {
         Request::call(request, config).await
     }
 
-    pub async fn save(config: &GemonConfig) -> Result<(), Box<dyn Error>> {
+    pub async fn save(config: &GemonConfig, _name: &String) -> Result<(), Box<dyn Error>> {
         // Build the request
         let request = RequestBuilder::build(config);
 

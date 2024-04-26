@@ -40,7 +40,8 @@ impl Project {
         match scenario {
             GemonProjectScenario::Init => Project::init(),
             GemonProjectScenario::Call => Request::execute(config).await,
-            GemonProjectScenario::Save => Request::save(config).await,
+            GemonProjectScenario::Save(name) => Request::save(config, name).await,
+            GemonProjectScenario::Delete(_) => todo!(),
         }
     }
 

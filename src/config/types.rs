@@ -6,11 +6,12 @@ pub enum GemonScenario {
     Project(GemonProjectScenario),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum GemonProjectScenario {
     Init,
     Call,
-    Save,
+    Save(String),
+    Delete(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

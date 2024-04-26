@@ -73,6 +73,10 @@ impl GemonArgumentParser for String {
             s if s.starts_with("--response-file=") => {
                 Some(GemonArgument::ResponseFilePath(simple_arg_parser(s, 16)))
             }
+            s if s.starts_with("-s=") => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Save(simple_arg_parser(s, 3)))),
+            s if s.starts_with("--save=") => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Save(simple_arg_parser(s, 7)))),
+            s if s.starts_with("-d=") => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Delete(simple_arg_parser(s, 3)))),
+            s if s.starts_with("--delete=") => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Delete(simple_arg_parser(s, 9)))),
             _ => None,
         }
     }
