@@ -1,8 +1,6 @@
+use super::request_builder::{GemonRequest, GemonResponse};
 use crate::config::types::GemonMethodType;
-use crate::{
-    constants,
-    request_builder::{GemonRequest, GemonResponse},
-};
+use crate::constants;
 use reqwest::{
     self,
     header::{self, HeaderMap, ACCEPT, CONTENT_TYPE},
@@ -139,8 +137,6 @@ impl GemonRequest for GemonRestRequest {
         }
 
         let response_bytes = response.bytes().await?;
-        Ok(GemonResponse {
-            data: response_bytes,
-        })
+        Ok(GemonResponse::new(response_bytes))
     }
 }

@@ -1,9 +1,16 @@
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum GemonScenario {
     Request,
-    ProjectSetup,
+    Project(GemonProjectScenario),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum GemonProjectScenario {
+    Init,
+    Call,
+    Save,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

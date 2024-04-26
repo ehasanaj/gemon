@@ -1,5 +1,5 @@
 use crate::config::arguments::GemonArgument;
-use crate::config::types::{GemonMethodType, GemonType};
+use crate::config::types::{GemonMethodType, GemonProjectScenario, GemonType};
 
 fn simple_arg_parser(s: &str, i: usize) -> String {
     let arg = &s[i..];
@@ -27,7 +27,8 @@ pub trait GemonArgumentParser {
 impl GemonArgumentParser for String {
     fn parse_argument(self) -> Option<GemonArgument> {
         match self.as_str() {
-            "init" => Some(GemonArgument::ProjectSetup),
+            "init" => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
+            "call" => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Call)),
             "-t=REST" | "--type=REST" => Some(GemonArgument::Type(GemonType::REST)),
             "-t=WEBSOCKET" | "--type=WEBSOCKET" => Some(GemonArgument::Type(GemonType::WEBSOCKET)),
             "-t=PROTO" | "--type=PROTO" => Some(GemonArgument::Type(GemonType::PROTO)),

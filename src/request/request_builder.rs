@@ -1,8 +1,6 @@
+use super::rest_request::{GemonRestRequest, GemonRestRequestBuilder};
 use crate::config::{types::GemonType, GemonConfig};
-use crate::request_builder::rest_request::{GemonRestRequest, GemonRestRequestBuilder};
 use bytes::Bytes;
-
-pub mod rest_request;
 
 pub trait GemonRequest {
     async fn execute(&self) -> Result<GemonResponse, Box<dyn std::error::Error>>;
@@ -12,12 +10,16 @@ pub struct GemonResponse {
 }
 
 impl GemonResponse {
+    pub fn new(data: Bytes) -> GemonResponse {
+        GemonResponse { data }
+    }
+
     pub fn data(&self) -> &Bytes {
         &self.data
     }
 }
 
-pub struct RequestBuilder {}
+pub struct RequestBuilder;
 
 impl RequestBuilder {
     fn build_rest_request(config: &GemonConfig) -> Box<GemonRestRequest> {

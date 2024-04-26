@@ -2,6 +2,8 @@ use crate::config::parser::GemonArgumentParser;
 use crate::config::types::{GemonMethodType, GemonType};
 use std::io;
 
+use super::types::GemonProjectScenario;
+
 #[derive(Debug)]
 pub enum GemonArgument {
     Type(GemonType),
@@ -11,7 +13,7 @@ pub enum GemonArgument {
     Body(String),
     FormData(String, String),
     ResponseFilePath(String),
-    ProjectSetup,
+    ProjectSetup(GemonProjectScenario),
 }
 
 #[derive(Debug)]

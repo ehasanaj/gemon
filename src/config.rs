@@ -1,10 +1,8 @@
 use crate::config::{
     arguments::{GemonArgument, GemonArguments},
-    types::{GemonMethodType, GemonType},
+    types::{GemonMethodType, GemonPrinter, GemonScenario, GemonType},
 };
 use std::{collections::HashMap, io};
-
-use self::types::{GemonPrinter, GemonScenario};
 
 pub mod arguments;
 pub mod parser;
@@ -50,7 +48,9 @@ impl GemonConfigBuilder {
                 self.form_data.insert(key.clone(), value.clone());
             }
             GemonArgument::ResponseFilePath(f) => self.response_file_path = Some(f.to_string()),
-            GemonArgument::ProjectSetup => self.gemon_scenario = GemonScenario::ProjectSetup,
+            GemonArgument::ProjectSetup(scenario) => {
+                self.gemon_scenario = GemonScenario::Project(scenario.clone())
+            }
         }
     }
 

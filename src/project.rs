@@ -1,4 +1,8 @@
-use crate::{constants::PROJECT_ROOT_FILE, request_builder::rest_request::GemonRestRequest};
+use crate::{
+    config::{types::GemonProjectScenario, GemonConfig},
+    constants::PROJECT_ROOT_FILE,
+    request::{rest_request::GemonRestRequest, Request},
+};
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt, fs, io::stdin};
 
@@ -29,7 +33,18 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn init() -> Result<(), Box<dyn Error>> {
+    pub async fn execute(
+        config: &GemonConfig,
+        scenario: &GemonProjectScenario,
+    ) -> Result<(), Box<dyn Error>> {
+        match scenario {
+            GemonProjectScenario::Init => Project::init(),
+            GemonProjectScenario::Call => Request::execute(config).await,
+            GemonProjectScenario::Save => Request::save(config).await,
+        }
+    }
+
+    fn init() -> Result<(), Box<dyn Error>> {
         if let Some(_) = Project::get_project() {
             return Err(Box::new(ProjectExistsError {
                 message: "Project already exists".to_string(),
