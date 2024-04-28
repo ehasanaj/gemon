@@ -1,10 +1,13 @@
 use super::rest_request::{GemonRestRequest, GemonRestRequestBuilder};
 use crate::config::{types::GemonType, GemonConfig};
 use bytes::Bytes;
+use std::error::Error;
 
 pub trait GemonRequest {
-    async fn execute(&self) -> Result<GemonResponse, Box<dyn std::error::Error>>;
+    async fn execute(&self) -> Result<GemonResponse, Box<dyn Error>>;
+    fn to_string_pretty(&self) -> String;
 }
+
 pub struct GemonResponse {
     data: Bytes,
 }

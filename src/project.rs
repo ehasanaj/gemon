@@ -1,10 +1,15 @@
 use crate::{
     config::{types::GemonProjectScenario, GemonConfig},
     constants::PROJECT_ROOT_FILE,
-    request::{rest_request::GemonRestRequest, Request},
+    project::project_handler::get_project,
+    request::{request_builder::RequestBuilder, rest_request::GemonRestRequest, Request},
 };
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt, fs, io::stdin};
+
+use self::project_handler::{delete_request, get_request, save_request};
+
+mod project_handler;
 
 #[derive(Serialize, Deserialize)]
 struct Environment {
@@ -39,14 +44,17 @@ impl Project {
     ) -> Result<(), Box<dyn Error>> {
         match scenario {
             GemonProjectScenario::Init => Project::init(),
-            GemonProjectScenario::Call => Request::execute(config).await,
-            GemonProjectScenario::Save(name) => Request::save(config, name).await,
-            GemonProjectScenario::Delete(_) => todo!(),
+            GemonProjectScenario::Call(name) => Request::call(get_request(name), config).await,
+            GemonProjectScenario::Save(name) => {
+                let request = RequestBuilder::build(config);
+                Request::call(save_request(request, name), config).await
+            }
+            GemonProjectScenario::Delete(name) => delete_request(name),
         }
     }
 
     fn init() -> Result<(), Box<dyn Error>> {
-        if let Some(_) = Project::get_project() {
+        if let Some(_) = get_project() {
             return Err(Box::new(ProjectExistsError {
                 message: "Project already exists".to_string(),
             }));
@@ -68,19 +76,5 @@ impl Project {
         let project_str = serde_json::to_string_pretty(&project)?;
         fs::write(PROJECT_ROOT_FILE, project_str)?;
         Ok(())
-    }
-
-    fn get_project() -> Option<Project> {
-        let project_str = match fs::read_to_string(PROJECT_ROOT_FILE) {
-            Ok(ps) => ps,
-            Err(err) => match err.kind() {
-                std::io::ErrorKind::NotFound => return None,
-                _ => panic!("Error reading project file"),
-            },
-        };
-
-        let project: Project =
-            serde_json::from_str(&project_str).expect("Error parsing project file");
-        Some(project)
     }
 }

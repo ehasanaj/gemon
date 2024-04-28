@@ -28,7 +28,6 @@ impl GemonArgumentParser for String {
     fn parse_argument(self) -> Option<GemonArgument> {
         match self.as_str() {
             "init" => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
-            "call" => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Call)),
             "-t=REST" | "--type=REST" => Some(GemonArgument::Type(GemonType::REST)),
             "-t=WEBSOCKET" | "--type=WEBSOCKET" => Some(GemonArgument::Type(GemonType::WEBSOCKET)),
             "-t=PROTO" | "--type=PROTO" => Some(GemonArgument::Type(GemonType::PROTO)),
@@ -73,10 +72,24 @@ impl GemonArgumentParser for String {
             s if s.starts_with("--response-file=") => {
                 Some(GemonArgument::ResponseFilePath(simple_arg_parser(s, 16)))
             }
-            s if s.starts_with("-s=") => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Save(simple_arg_parser(s, 3)))),
-            s if s.starts_with("--save=") => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Save(simple_arg_parser(s, 7)))),
-            s if s.starts_with("-d=") => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Delete(simple_arg_parser(s, 3)))),
-            s if s.starts_with("--delete=") => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Delete(simple_arg_parser(s, 9)))),
+            s if s.starts_with("-s=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Save(simple_arg_parser(s, 3)),
+            )),
+            s if s.starts_with("--save=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Save(simple_arg_parser(s, 7)),
+            )),
+            s if s.starts_with("-c=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Call(simple_arg_parser(s, 3)),
+            )),
+            s if s.starts_with("--call=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Call(simple_arg_parser(s, 7)),
+            )),
+            s if s.starts_with("-d=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Delete(simple_arg_parser(s, 3)),
+            )),
+            s if s.starts_with("--delete=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Delete(simple_arg_parser(s, 9)),
+            )),
             _ => None,
         }
     }

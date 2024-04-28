@@ -139,4 +139,8 @@ impl GemonRequest for GemonRestRequest {
         let response_bytes = response.bytes().await?;
         Ok(GemonResponse::new(response_bytes))
     }
+
+    fn to_string_pretty(&self) -> String {
+        serde_json::to_string_pretty(self).expect("Could not parse GemonRestRequest to json string")
+    }
 }

@@ -9,7 +9,7 @@ pub enum GemonScenario {
 #[derive(Debug, Clone)]
 pub enum GemonProjectScenario {
     Init,
-    Call,
+    Call(String),
     Save(String),
     Delete(String),
 }
