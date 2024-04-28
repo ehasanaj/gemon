@@ -111,12 +111,11 @@ impl GemonConfig {
     }
 
     pub fn gemon_method_type(&self) -> GemonMethodType {
-        self.gemon_method_type
-            .expect("-t=[type] or --type=[type] expected")
+        self.gemon_method_type.unwrap_or(GemonMethodType::GET)
     }
 
     pub fn gemon_url(&self) -> String {
-        String::from(self.url.as_ref().expect("-u=[uri] or --uri=[uri] expected"))
+        String::from(self.url.clone().unwrap_or_default())
     }
 
     pub fn gemon_headers(&self) -> &HashMap<String, String> {

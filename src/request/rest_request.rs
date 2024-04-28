@@ -94,6 +94,10 @@ impl GemonRestRequestBuilder {
             form_data: self.form_data.clone(),
         }
     }
+
+    pub fn build_from_string(content: &String) -> GemonRestRequest {
+        serde_json::from_str(content.as_str()).expect("Could not parse Gemon Rest Request")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -149,5 +153,13 @@ impl GemonRequest for GemonRestRequest {
 
     fn json_body(&self) -> String {
         self.body.clone().unwrap_or_default()
+    }
+
+    fn request_type(&self) -> String {
+        String::from("REST")
+    }
+
+    fn set_body(&mut self, body: Option<String>) {
+        self.body = body
     }
 }

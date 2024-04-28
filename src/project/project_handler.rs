@@ -1,7 +1,7 @@
 use super::Project;
 use crate::{
     constants::PROJECT_ROOT_FILE,
-    request::{request_builder::GemonRequest, rest_request::GemonRestRequestBuilder},
+    request::request_builder::{GemonRequest, RequestBuilder},
     EmptyResult,
 };
 use std::fs;
@@ -27,6 +27,7 @@ pub fn save_request(request: Box<impl GemonRequest>, name: &String) -> Box<impl 
     validate_prject();
     let json_metadata = request.json_metadata();
     let json_body = request.json_body();
+    let request_type_marker = request.request_type();
     if let Err(err) = fs::read_dir(name) {
         let _ = match err.kind() {
             std::io::ErrorKind::NotFound => fs::create_dir(name).expect("Create dir failed!"),
@@ -39,12 +40,23 @@ pub fn save_request(request: Box<impl GemonRequest>, name: &String) -> Box<impl 
     fs::write(format!("{}/metadata.json", name), json_metadata)
         .expect("Could not create metadata file!");
     fs::write(format!("{}/body.json", name), json_body).expect("Could not create body file!");
+    fs::write(format!("{}/.marker", name), request_type_marker)
+        .expect("Failed to mark request dir");
     request
 }
 
-pub fn get_request(_name: &String) -> Box<impl GemonRequest> {
+pub fn get_request(name: &String) -> Box<impl GemonRequest> {
     validate_prject();
-    Box::new(GemonRestRequestBuilder::new().build()) //TODO build as it should with all the required info
+    let _ = fs::read_dir(name)
+        .expect(format!("Could not find saved request with name: {}", name).as_str());
+    let request_type =
+        fs::read_to_string(format!("{name}/.marker")).expect("Could not read dir marker");
+    let metadata_json = fs::read_to_string(format!("{name}/metadata.json"))
+        .expect("Could not read metadata json file for request");
+    let body_json = fs::read_to_string(format!("{name}/body.json")).ok();
+    let mut request = RequestBuilder::build_from_string(&metadata_json, &request_type);
+    request.set_body(body_json);
+    request
 }
 
 pub fn delete_request(name: &String) -> EmptyResult {
@@ -57,7 +69,7 @@ mod tests {
     use crate::{config::types::GemonMethodType, request::rest_request::GemonRestRequestBuilder};
     use reqwest::header::AUTHORIZATION;
     use serde_json::json;
-    use std::{borrow::Borrow, collections::HashMap};
+    use std::collections::HashMap;
 
     #[test]
     fn saves_rest_request() {
@@ -79,8 +91,15 @@ mod tests {
                 .set_body(Some(body.to_string()))
                 .build(),
         );
-
-        let saved_request = save_request(request.clone(), "post_smth".to_string().borrow());
+        let name = String::from("post_smth");
+        let saved_request = save_request(request.clone(), &name);
         assert_eq!(saved_request.json_metadata(), request.json_metadata())
+    }
+
+    #[test]
+    fn get_request_by_name() {
+        let name = String::from("post_smth");
+        let request = get_request(&name);
+        assert!(!request.json_metadata().is_empty())
     }
 }
