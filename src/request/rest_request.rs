@@ -96,7 +96,7 @@ impl GemonRestRequestBuilder {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GemonRestRequest {
     gemon_method_type: GemonMethodType,
     uri: String,
@@ -140,7 +140,14 @@ impl GemonRequest for GemonRestRequest {
         Ok(GemonResponse::new(response_bytes))
     }
 
-    fn to_string_pretty(&self) -> String {
-        serde_json::to_string_pretty(self).expect("Could not parse GemonRestRequest to json string")
+    fn json_metadata(&self) -> String {
+        let mut request_to_copy = self.clone();
+        request_to_copy.body.take();
+        serde_json::to_string_pretty(&request_to_copy)
+            .expect("Could not parse GemonRestRequest to json string")
+    }
+
+    fn json_body(&self) -> String {
+        self.body.clone().unwrap_or_default()
     }
 }

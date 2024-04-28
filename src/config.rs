@@ -8,7 +8,7 @@ pub mod arguments;
 pub mod parser;
 pub mod types;
 
-struct GemonConfigBuilder {
+pub struct GemonConfigBuilder {
     gemon_scenario: GemonScenario,
     gemon_type: GemonType,
     gemon_method_type: Option<GemonMethodType>,

@@ -5,7 +5,8 @@ use std::error::Error;
 
 pub trait GemonRequest {
     async fn execute(&self) -> Result<GemonResponse, Box<dyn Error>>;
-    fn to_string_pretty(&self) -> String;
+    fn json_metadata(&self) -> String;
+    fn json_body(&self) -> String;
 }
 
 pub struct GemonResponse {
