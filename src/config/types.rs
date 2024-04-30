@@ -11,6 +11,7 @@ pub enum GemonProjectScenario {
     Init,
     Call(String),
     Save(String),
+    SaveAndCall(String),
     Delete(String),
 }
 

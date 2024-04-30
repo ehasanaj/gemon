@@ -16,6 +16,7 @@ pub struct GemonConfigBuilder {
     headers: HashMap<String, String>,
     body: Option<String>,
     form_data: HashMap<String, String>,
+    write_to_request_response_file: bool,
     response_file_path: Option<String>,
 }
 
@@ -30,6 +31,7 @@ impl GemonConfigBuilder {
             body: None,
             form_data: HashMap::new(),
             response_file_path: None,
+            write_to_request_response_file: false,
         }
     }
 
@@ -47,18 +49,46 @@ impl GemonConfigBuilder {
             GemonArgument::FormData(key, value) => {
                 self.form_data.insert(key.clone(), value.clone());
             }
-            GemonArgument::ResponseFilePath(f) => self.response_file_path = Some(f.to_string()),
+            GemonArgument::ResponseFilePath(f) => match f {
+                Some(path) => self.response_file_path = Some(path.to_owned()),
+                None => self.write_to_request_response_file = true,
+            },
             GemonArgument::ProjectSetup(scenario) => {
                 self.gemon_scenario = GemonScenario::Project(scenario.clone())
             }
         }
     }
 
+    fn build_response_file_path(
+        write_to_request_response_file: bool,
+        response_file_path: &Option<String>,
+        gemon_scenario: &GemonScenario,
+    ) -> Option<String> {
+        match write_to_request_response_file {
+            true => match gemon_scenario {
+                GemonScenario::Project(project_scenario) => match project_scenario {
+                    types::GemonProjectScenario::Call(name) => {
+                        Some(format!("{name}/response.json"))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            },
+            false => response_file_path.to_owned(),
+        }
+    }
+
     fn build(self) -> GemonConfig {
+        let path = GemonConfigBuilder::build_response_file_path(
+            self.write_to_request_response_file,
+            &self.response_file_path,
+            &self.gemon_scenario,
+        );
+
         GemonConfig {
             gemon_scenario: self.gemon_scenario,
             gemon_type: self.gemon_type,
-            gemon_printer: match self.response_file_path {
+            gemon_printer: match path {
                 Some(_) => GemonPrinter::File,
                 None => GemonPrinter::Terminal,
             },
@@ -67,7 +97,7 @@ impl GemonConfigBuilder {
             headers: self.headers,
             body: self.body,
             form_data: self.form_data,
-            response_file_path: self.response_file_path.unwrap_or_default(),
+            response_file_path: path.unwrap_or_default(),
         }
     }
 }

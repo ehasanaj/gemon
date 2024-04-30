@@ -47,6 +47,11 @@ impl Project {
             GemonProjectScenario::Call(name) => Request::call(get_request(name), config).await,
             GemonProjectScenario::Save(name) => {
                 let request = RequestBuilder::build(config);
+                save_request(request, name);
+                Ok(())
+            }
+            GemonProjectScenario::SaveAndCall(name) => {
+                let request = RequestBuilder::build(config);
                 Request::call(save_request(request, name), config).await
             }
             GemonProjectScenario::Delete(name) => delete_request(name),

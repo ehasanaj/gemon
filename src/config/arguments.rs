@@ -12,7 +12,7 @@ pub enum GemonArgument {
     Header(String, String),
     Body(String),
     FormData(String, String),
-    ResponseFilePath(String),
+    ResponseFilePath(Option<String>),
     ProjectSetup(GemonProjectScenario),
 }
 
