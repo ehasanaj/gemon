@@ -48,6 +48,8 @@ impl GemonArgumentParser for String {
             }),
             "-f" => Some(GemonArgument::ResponseFilePath(None)),
             "--file" => Some(GemonArgument::ResponseFilePath(None)),
+            "-l" => Some(GemonArgument::LogResponse),
+            "--log" => Some(GemonArgument::LogResponse),
             s if s.starts_with("-u=") => Some(GemonArgument::Uri(simple_arg_parser(s, 3))),
             s if s.starts_with("--uri=") => Some(GemonArgument::Uri(simple_arg_parser(s, 6))),
             s if s.starts_with("-h=") => {

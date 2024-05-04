@@ -1,3 +1,5 @@
+use chrono::Local;
+
 use crate::config::{
     arguments::{GemonArgument, GemonArguments},
     types::{GemonMethodType, GemonPrinter, GemonScenario, GemonType},
@@ -20,6 +22,7 @@ pub struct GemonConfigBuilder {
     form_data: HashMap<String, String>,
     write_to_request_response_file: bool,
     response_file_path: Option<String>,
+    log_response: bool,
 }
 
 impl GemonConfigBuilder {
@@ -34,6 +37,7 @@ impl GemonConfigBuilder {
             form_data: HashMap::new(),
             response_file_path: None,
             write_to_request_response_file: false,
+            log_response: false,
         }
     }
 
@@ -58,17 +62,26 @@ impl GemonConfigBuilder {
             GemonArgument::ProjectSetup(scenario) => {
                 self.gemon_scenario = GemonScenario::Project(scenario.clone())
             }
+            GemonArgument::LogResponse => self.log_response = true,
         }
     }
 
     fn build_response_file_path(
         write_to_request_response_file: bool,
+        log_response: bool,
         response_file_path: &Option<String>,
         gemon_scenario: &GemonScenario,
     ) -> Option<String> {
         match write_to_request_response_file {
             true => match gemon_scenario {
-                GemonScenario::Project(GemonProjectScenario::Call(name)) => {
+                GemonScenario::Project(GemonProjectScenario::Call(name)) if log_response => {
+                    let now = Local::now();
+                    Some(format!(
+                        "{name}/response_{}.json",
+                        now.format("%Y_%m_%d_%H_%M_%S")
+                    ))
+                }
+                GemonScenario::Project(GemonProjectScenario::Call(name)) if !log_response => {
                     Some(format!("{name}/response.json"))
                 }
                 _ => None,
@@ -80,6 +93,7 @@ impl GemonConfigBuilder {
     fn build(self) -> GemonConfig {
         let path = GemonConfigBuilder::build_response_file_path(
             self.write_to_request_response_file,
+            self.log_response,
             &self.response_file_path,
             &self.gemon_scenario,
         );
@@ -144,7 +158,7 @@ impl GemonConfig {
     }
 
     pub fn gemon_url(&self) -> String {
-        self.url.clone().unwrap_or_default()
+        self.url.to_owned().unwrap_or_default()
     }
 
     pub fn gemon_headers(&self) -> &HashMap<String, String> {
@@ -152,7 +166,7 @@ impl GemonConfig {
     }
 
     pub fn gemon_body(&self) -> Option<String> {
-        self.body.clone()
+        self.body.to_owned()
     }
 
     pub fn gemon_form_data(&self) -> &HashMap<String, String> {
@@ -160,6 +174,6 @@ impl GemonConfig {
     }
 
     pub fn gemon_response_file_path(&self) -> String {
-        self.response_file_path.clone()
+        self.response_file_path.to_owned()
     }
 }
