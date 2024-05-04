@@ -59,7 +59,7 @@ impl Project {
     }
 
     fn init() -> Result<(), Box<dyn Error>> {
-        if let Some(_) = get_project() {
+        if get_project().is_some() {
             return Err(Box::new(ProjectExistsError {
                 message: "Project already exists".to_string(),
             }));

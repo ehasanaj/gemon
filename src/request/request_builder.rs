@@ -40,12 +40,12 @@ impl RequestBuilder {
         )
     }
 
-    fn build_rest_request_from_string(content: &String) -> Box<GemonRestRequest> {
+    fn build_rest_request_from_string(content: &str) -> Box<GemonRestRequest> {
         Box::new(GemonRestRequestBuilder::build_from_string(content))
     }
 
-    pub fn build_from_string(content: &String, request_type: &String) -> Box<impl GemonRequest> {
-        match request_type.as_str() {
+    pub fn build_from_string(content: &str, request_type: &str) -> Box<impl GemonRequest> {
+        match request_type {
             "REST" => RequestBuilder::build_rest_request_from_string(content),
             "WEBSOCKET" => todo!(),
             "PROTO" => todo!(),
@@ -55,9 +55,9 @@ impl RequestBuilder {
 
     pub fn build(config: &GemonConfig) -> Box<impl GemonRequest> {
         match config.gemon_type() {
-            GemonType::REST => RequestBuilder::build_rest_request(config),
-            GemonType::WEBSOCKET => todo!(),
-            GemonType::PROTO => todo!(),
+            GemonType::Rest => RequestBuilder::build_rest_request(config),
+            GemonType::Websocket => todo!(),
+            GemonType::Proto => todo!(),
         }
     }
 }

@@ -56,7 +56,7 @@ impl GemonRestRequestBuilder {
 
     pub fn set_url(self, url: String) -> GemonRestRequestBuilder {
         GemonRestRequestBuilder {
-            url: Some(String::from(url)),
+            url: Some(url),
             ..self
         }
     }
@@ -95,8 +95,8 @@ impl GemonRestRequestBuilder {
         }
     }
 
-    pub fn build_from_string(content: &String) -> GemonRestRequest {
-        serde_json::from_str(content.as_str()).expect("Could not parse Gemon Rest Request")
+    pub fn build_from_string(content: &str) -> GemonRestRequest {
+        serde_json::from_str(content).expect("Could not parse Gemon Rest Request")
     }
 }
 
@@ -113,11 +113,11 @@ impl GemonRequest for GemonRestRequest {
     async fn execute(&self) -> Result<GemonResponse, Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
         let mut request = match self.gemon_method_type {
-            GemonMethodType::GET => client.get(&self.uri),
-            GemonMethodType::POST => client.post(&self.uri),
-            GemonMethodType::DELETE => client.delete(&self.uri),
-            GemonMethodType::PUT => client.put(&self.uri),
-            GemonMethodType::PATCH => client.patch(&self.uri),
+            GemonMethodType::Get => client.get(&self.uri),
+            GemonMethodType::Post => client.post(&self.uri),
+            GemonMethodType::Delete => client.delete(&self.uri),
+            GemonMethodType::Put => client.put(&self.uri),
+            GemonMethodType::Patch => client.patch(&self.uri),
         };
 
         request = request
@@ -125,7 +125,7 @@ impl GemonRequest for GemonRestRequest {
             .header(ACCEPT, constants::DEFAULT_ACCEPT)
             .headers(self.headers.clone().to_header_map());
 
-        if self.form_data.len() > 0 {
+        if !self.form_data.is_empty() {
             request = request.form(&self.form_data);
         }
 

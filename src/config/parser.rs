@@ -10,7 +10,7 @@ fn key_value_pair_arg_parser(s: &str, i: usize) -> (String, String) {
     let key_value = &s[i..];
     let arg: Vec<&str> = key_value.split(':').collect();
     let key = arg
-        .get(0)
+        .first()
         .expect("arg key not provided correctly e.x `-h=key:value`")
         .to_string();
     let value = arg
@@ -28,23 +28,23 @@ impl GemonArgumentParser for String {
     fn parse_argument(self) -> Option<GemonArgument> {
         match self.as_str() {
             "init" => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
-            "-t=REST" | "--type=REST" => Some(GemonArgument::Type(GemonType::REST)),
-            "-t=WEBSOCKET" | "--type=WEBSOCKET" => Some(GemonArgument::Type(GemonType::WEBSOCKET)),
-            "-t=PROTO" | "--type=PROTO" => Some(GemonArgument::Type(GemonType::PROTO)),
+            "-t=REST" | "--type=REST" => Some(GemonArgument::Type(GemonType::Rest)),
+            "-t=WEBSOCKET" | "--type=WEBSOCKET" => Some(GemonArgument::Type(GemonType::Websocket)),
+            "-t=PROTO" | "--type=PROTO" => Some(GemonArgument::Type(GemonType::Proto)),
             "-m=GET" | "--method=GET" => Some(GemonArgument::Method {
-                gemon_method_type: GemonMethodType::GET,
+                gemon_method_type: GemonMethodType::Get,
             }),
             "-m=POST" | "--method=POST" => Some(GemonArgument::Method {
-                gemon_method_type: GemonMethodType::POST,
+                gemon_method_type: GemonMethodType::Post,
             }),
             "-m=DELETE" | "--method=DELETE" => Some(GemonArgument::Method {
-                gemon_method_type: GemonMethodType::DELETE,
+                gemon_method_type: GemonMethodType::Delete,
             }),
             "-m=PUT" | "--method=PUT" => Some(GemonArgument::Method {
-                gemon_method_type: GemonMethodType::PUT,
+                gemon_method_type: GemonMethodType::Put,
             }),
             "-m=PATCH" | "--method=PATCH" => Some(GemonArgument::Method {
-                gemon_method_type: GemonMethodType::PATCH,
+                gemon_method_type: GemonMethodType::Patch,
             }),
             "-f" => Some(GemonArgument::ResponseFilePath(None)),
             "--file" => Some(GemonArgument::ResponseFilePath(None)),

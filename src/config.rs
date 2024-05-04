@@ -4,6 +4,8 @@ use crate::config::{
 };
 use std::{collections::HashMap, io};
 
+use self::types::GemonProjectScenario;
+
 pub mod arguments;
 pub mod parser;
 pub mod types;
@@ -24,7 +26,7 @@ impl GemonConfigBuilder {
     fn new() -> GemonConfigBuilder {
         GemonConfigBuilder {
             gemon_scenario: GemonScenario::Request,
-            gemon_type: GemonType::REST,
+            gemon_type: GemonType::Rest,
             gemon_method_type: None,
             url: None,
             headers: HashMap::new(),
@@ -37,17 +39,17 @@ impl GemonConfigBuilder {
 
     fn process_argument(&mut self, argument: &GemonArgument) {
         match argument {
-            GemonArgument::Type(t) => self.gemon_type = t.clone(),
+            GemonArgument::Type(t) => self.gemon_type = *t,
             GemonArgument::Method {
                 gemon_method_type: t,
-            } => self.gemon_method_type = Some(t.clone()),
+            } => self.gemon_method_type = Some(*t),
             GemonArgument::Uri(t) => self.url = Some(t.to_string()),
             GemonArgument::Header(key, value) => {
-                self.headers.insert(key.clone(), value.clone());
+                self.headers.insert(key.into(), value.into());
             }
             GemonArgument::Body(b) => self.body = Some(b.to_string()),
             GemonArgument::FormData(key, value) => {
-                self.form_data.insert(key.clone(), value.clone());
+                self.form_data.insert(key.into(), value.into());
             }
             GemonArgument::ResponseFilePath(f) => match f {
                 Some(path) => self.response_file_path = Some(path.to_owned()),
@@ -66,12 +68,9 @@ impl GemonConfigBuilder {
     ) -> Option<String> {
         match write_to_request_response_file {
             true => match gemon_scenario {
-                GemonScenario::Project(project_scenario) => match project_scenario {
-                    types::GemonProjectScenario::Call(name) => {
-                        Some(format!("{name}/response.json"))
-                    }
-                    _ => None,
-                },
+                GemonScenario::Project(GemonProjectScenario::Call(name)) => {
+                    Some(format!("{name}/response.json"))
+                }
                 _ => None,
             },
             false => response_file_path.to_owned(),
@@ -121,7 +120,7 @@ impl GemonConfig {
 
         gemon_arguments
             .arguments()
-            .into_iter()
+            .iter()
             .for_each(|argument| builder.process_argument(argument));
 
         let config = builder.build();
@@ -141,11 +140,11 @@ impl GemonConfig {
     }
 
     pub fn gemon_method_type(&self) -> GemonMethodType {
-        self.gemon_method_type.unwrap_or(GemonMethodType::GET)
+        self.gemon_method_type.unwrap_or(GemonMethodType::Get)
     }
 
     pub fn gemon_url(&self) -> String {
-        String::from(self.url.clone().unwrap_or_default())
+        self.url.clone().unwrap_or_default()
     }
 
     pub fn gemon_headers(&self) -> &HashMap<String, String> {

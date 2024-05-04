@@ -29,7 +29,7 @@ pub fn save_request(request: Box<impl GemonRequest>, name: &String) -> Box<impl 
     let json_body = request.json_body();
     let request_type_marker = request.request_type();
     if let Err(err) = fs::read_dir(name) {
-        let _ = match err.kind() {
+        match err.kind() {
             std::io::ErrorKind::NotFound => fs::create_dir(name).expect("Create dir failed!"),
             std::io::ErrorKind::PermissionDenied => {
                 panic!("User does not have permissions to write to dir!")
@@ -48,7 +48,7 @@ pub fn save_request(request: Box<impl GemonRequest>, name: &String) -> Box<impl 
 pub fn get_request(name: &String) -> Box<impl GemonRequest> {
     validate_prject();
     let _ = fs::read_dir(name)
-        .expect(format!("Could not find saved request with name: {}", name).as_str());
+        .unwrap_or_else(|_| panic!("Could not find saved request with name: {}", name));
     let request_type =
         fs::read_to_string(format!("{name}/.marker")).expect("Could not read dir marker");
     let metadata_json = fs::read_to_string(format!("{name}/metadata.json"))
@@ -85,7 +85,7 @@ mod tests {
         headers.insert(AUTHORIZATION.to_string(), "Bearer something".to_string());
         let request = Box::new(
             GemonRestRequestBuilder::new()
-                .set_gemon_method_type(GemonMethodType::POST)
+                .set_gemon_method_type(GemonMethodType::Post)
                 .set_url("http://localhost:8080/post".to_string())
                 .set_headers(&headers)
                 .set_body(Some(body.to_string()))

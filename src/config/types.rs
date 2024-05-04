@@ -17,18 +17,18 @@ pub enum GemonProjectScenario {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GemonType {
-    REST,
-    WEBSOCKET,
-    PROTO,
+    Rest,
+    Websocket,
+    Proto,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GemonMethodType {
-    GET,
-    POST,
-    DELETE,
-    PUT,
-    PATCH,
+    Get,
+    Post,
+    Delete,
+    Put,
+    Patch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
