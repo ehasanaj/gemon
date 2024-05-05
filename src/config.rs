@@ -23,6 +23,7 @@ pub struct GemonConfigBuilder {
     write_to_request_response_file: bool,
     response_file_path: Option<String>,
     log_response: bool,
+    also_print_to_terminal: bool,
 }
 
 impl GemonConfigBuilder {
@@ -38,6 +39,7 @@ impl GemonConfigBuilder {
             response_file_path: None,
             write_to_request_response_file: false,
             log_response: false,
+            also_print_to_terminal: false,
         }
     }
 
@@ -63,6 +65,7 @@ impl GemonConfigBuilder {
                 self.gemon_scenario = GemonScenario::Project(scenario.clone())
             }
             GemonArgument::LogResponse => self.log_response = true,
+            GemonArgument::AlsoPrintToTerminal => self.also_print_to_terminal = true,
         }
     }
 
@@ -110,7 +113,8 @@ impl GemonConfigBuilder {
             headers: self.headers,
             body: self.body,
             form_data: self.form_data,
-            response_file_path: path.unwrap_or_default(),
+            response_file_path: path,
+            also_print_to_terminal: self.also_print_to_terminal,
         }
     }
 }
@@ -125,7 +129,8 @@ pub struct GemonConfig {
     headers: HashMap<String, String>,
     body: Option<String>,
     form_data: HashMap<String, String>,
-    response_file_path: String,
+    response_file_path: Option<String>,
+    also_print_to_terminal: bool,
 }
 
 impl GemonConfig {
@@ -173,7 +178,11 @@ impl GemonConfig {
         &self.form_data
     }
 
-    pub fn gemon_response_file_path(&self) -> String {
+    pub fn gemon_response_file_path(&self) -> Option<String> {
         self.response_file_path.to_owned()
+    }
+
+    pub fn gemon_also_print_to_terminal(&self) -> bool {
+        self.also_print_to_terminal
     }
 }

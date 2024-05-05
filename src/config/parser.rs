@@ -28,6 +28,9 @@ impl GemonArgumentParser for String {
     fn parse_argument(self) -> Option<GemonArgument> {
         match self.as_str() {
             "init" => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
+            "print" => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::PrintLastCall,
+            )),
             "-t=REST" | "--type=REST" => Some(GemonArgument::Type(GemonType::Rest)),
             "-t=WEBSOCKET" | "--type=WEBSOCKET" => Some(GemonArgument::Type(GemonType::Websocket)),
             "-t=PROTO" | "--type=PROTO" => Some(GemonArgument::Type(GemonType::Proto)),
@@ -50,6 +53,8 @@ impl GemonArgumentParser for String {
             "--file" => Some(GemonArgument::ResponseFilePath(None)),
             "-l" => Some(GemonArgument::LogResponse),
             "--log" => Some(GemonArgument::LogResponse),
+            "-p" => Some(GemonArgument::AlsoPrintToTerminal),
+            "--print" => Some(GemonArgument::AlsoPrintToTerminal),
             s if s.starts_with("-u=") => Some(GemonArgument::Uri(simple_arg_parser(s, 3))),
             s if s.starts_with("--uri=") => Some(GemonArgument::Uri(simple_arg_parser(s, 6))),
             s if s.starts_with("-h=") => {

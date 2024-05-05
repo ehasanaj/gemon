@@ -15,6 +15,7 @@ pub enum GemonArgument {
     ResponseFilePath(Option<String>),
     ProjectSetup(GemonProjectScenario),
     LogResponse,
+    AlsoPrintToTerminal,
 }
 
 #[derive(Debug)]

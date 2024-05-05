@@ -9,6 +9,13 @@ impl TerminalPrinter {
     pub fn new() -> TerminalPrinter {
         TerminalPrinter {}
     }
+
+    pub fn print_string(&self, path: &str) -> Result<(), std::io::Error> {
+        let value: Value = serde_json::from_str(path)?;
+        let pretty_response = serde_json::to_string_pretty(&value)?;
+        println!("{}", pretty_response);
+        Ok(())
+    }
 }
 
 impl Printer for TerminalPrinter {

@@ -1,4 +1,4 @@
-use crate::config::GemonConfig;
+use crate::config::{types::GemonPrinter, GemonConfig};
 use bytes::Bytes;
 
 use self::{file_printer::FilePrinter, terminal_printer::TerminalPrinter};
@@ -15,10 +15,10 @@ pub struct PrinterBuilder {}
 impl PrinterBuilder {
     pub fn build(config: &GemonConfig) -> Box<dyn Printer> {
         match config.gemon_printer() {
-            crate::config::types::GemonPrinter::Terminal => Box::new(TerminalPrinter::new()),
-            crate::config::types::GemonPrinter::File => {
-                let mut file_printer = FilePrinter::new();
-                file_printer.set_file_path(&config.gemon_response_file_path());
+            GemonPrinter::Terminal => Box::new(TerminalPrinter::new()),
+            GemonPrinter::File => {
+                let mut file_printer = FilePrinter::new(config.gemon_also_print_to_terminal());
+                file_printer.set_file_path(config.gemon_response_file_path());
                 Box::new(file_printer)
             }
         }

@@ -13,6 +13,7 @@ pub enum GemonProjectScenario {
     Save(String),
     SaveAndCall(String),
     Delete(String),
+    PrintLastCall,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
