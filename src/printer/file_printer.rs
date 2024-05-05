@@ -1,7 +1,5 @@
 use std::fs;
-
 use serde_json::Value;
-
 use super::Printer;
 
 pub struct FilePrinter {
