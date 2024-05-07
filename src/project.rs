@@ -1,5 +1,5 @@
 use self::project_handler::{
-    add_env_value, delete_request, get_request, remove_env_value, save_request,
+    add_env_value, delete_request, get_request, remove_env_value, save_request, set_selected_env,
 };
 use crate::{
     config::{types::GemonProjectScenario, GemonConfig},
@@ -51,6 +51,14 @@ impl fmt::Display for ProjectError {
 
 impl Error for ProjectError {}
 
+impl ProjectError {
+    pub fn from(message: &str) -> Box<Self> {
+        Box::new(ProjectError {
+            message: String::from(message),
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Project {
     name: String,
@@ -81,6 +89,14 @@ impl Project {
             .and_modify(|env| env.remove_value(key));
     }
 
+    fn set_selected_env(&mut self, env: &String) -> EmptyResult {
+        if !self.environments.contains_key(env) {
+            return Err(ProjectError::from("Environment does not exist!"));
+        }
+        self.selected_environment = Some(env.to_owned());
+        Ok(())
+    }
+
     fn save(&self) -> EmptyResult {
         let project_str = serde_json::to_string_pretty(&self)?;
         fs::write(PROJECT_ROOT_FILE, project_str).map_err(|err| err.into())
@@ -107,6 +123,7 @@ impl Project {
             GemonProjectScenario::PrintLastCall => Project::print_last_called_request(),
             GemonProjectScenario::AddEnv(e, k, v) => add_env_value(e, (k.to_owned(), v.to_owned())),
             GemonProjectScenario::RemoveEnv(e, k) => remove_env_value(e, k),
+            GemonProjectScenario::SelectEnv(e) => set_selected_env(e),
         }
     }
 

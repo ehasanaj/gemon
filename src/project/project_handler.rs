@@ -80,6 +80,14 @@ pub fn remove_env_value(env: &String, key: &str) -> EmptyResult {
     project.save()
 }
 
+pub fn set_selected_env(env: &String) -> EmptyResult {
+    let mut project = get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+    project.set_selected_env(env)?;
+    project.save()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -16,6 +16,7 @@ pub enum GemonProjectScenario {
     PrintLastCall,
     AddEnv(String, String, String),
     RemoveEnv(String, String),
+    SelectEnv(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

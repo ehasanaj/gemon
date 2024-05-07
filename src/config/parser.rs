@@ -147,6 +147,12 @@ impl GemonArgumentParser for String {
                     GemonProjectScenario::RemoveEnv(one, two),
                 ))
             }
+            s if s.starts_with("-se=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::SelectEnv(simple_arg_parser(s, 4)),
+            )),
+            s if s.starts_with("--select-env=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::SelectEnv(simple_arg_parser(s, 13)),
+            )),
             _ => None,
         }
     }
