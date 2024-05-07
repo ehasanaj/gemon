@@ -1,4 +1,4 @@
-use super::Project;
+use super::{Project, ProjectError};
 use crate::{
     constants::PROJECT_ROOT_FILE,
     request::request_builder::{GemonRequest, RequestBuilder},
@@ -60,7 +60,24 @@ pub fn get_request(name: &String) -> Box<impl GemonRequest> {
 }
 
 pub fn delete_request(name: &String) -> EmptyResult {
+    validate_prject();
     fs::remove_dir_all(name).map_err(|err| err.into())
+}
+
+pub fn add_env_value(name: &String, env_value: (String, String)) -> EmptyResult {
+    let mut project = get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+    project.add_env_value(name, env_value);
+    project.save()
+}
+
+pub fn remove_env_value(env: &String, key: &str) -> EmptyResult {
+    let mut project = get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+    project.remove_env_value(env, key);
+    project.save()
 }
 
 #[cfg(test)]

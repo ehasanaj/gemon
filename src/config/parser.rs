@@ -20,6 +20,24 @@ fn key_value_pair_arg_parser(s: &str, i: usize) -> (String, String) {
     (key, value)
 }
 
+fn triple_value_arg_parser(s: &str, i: usize) -> (String, String, String) {
+    let group = &s[i..];
+    let arg: Vec<&str> = group.split(':').collect();
+    let one = arg
+        .first()
+        .expect("arg one not provided correctly for triple touple e.x `-[e]=one:two:three`")
+        .to_string();
+    let two = arg
+        .get(1)
+        .expect("arg two not provided correctly for triple touple e.x `-[e]=one:two:three`")
+        .to_string();
+    let three = arg
+        .get(2)
+        .expect("arg three not provided correctly for triple touple e.x `-[e]=one:two:three`")
+        .to_string();
+    (one, two, three)
+}
+
 pub trait GemonArgumentParser {
     fn parse_argument(self) -> Option<GemonArgument>;
 }
@@ -105,6 +123,30 @@ impl GemonArgumentParser for String {
             s if s.starts_with("--delete=") => Some(GemonArgument::ProjectSetup(
                 GemonProjectScenario::Delete(simple_arg_parser(s, 9)),
             )),
+            s if s.starts_with("-e=") => {
+                let (one, two, three) = triple_value_arg_parser(s, 3);
+                Some(GemonArgument::ProjectSetup(GemonProjectScenario::AddEnv(
+                    one, two, three,
+                )))
+            }
+            s if s.starts_with("--env=") => {
+                let (one, two, three) = triple_value_arg_parser(s, 6);
+                Some(GemonArgument::ProjectSetup(GemonProjectScenario::AddEnv(
+                    one, two, three,
+                )))
+            }
+            s if s.starts_with("-ed=") => {
+                let (one, two) = key_value_pair_arg_parser(s, 4);
+                Some(GemonArgument::ProjectSetup(
+                    GemonProjectScenario::RemoveEnv(one, two),
+                ))
+            }
+            s if s.starts_with("-env-delete=") => {
+                let (one, two) = key_value_pair_arg_parser(s, 12);
+                Some(GemonArgument::ProjectSetup(
+                    GemonProjectScenario::RemoveEnv(one, two),
+                ))
+            }
             _ => None,
         }
     }
