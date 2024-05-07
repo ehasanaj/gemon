@@ -1,6 +1,5 @@
 use self::project_handler::{
-    add_env_value, delete_request, get_request, get_selected_env, remove_env_value, save_request,
-    set_selected_env,
+    add_env_value, delete_request, get_request, get_selected_env, print_all_env, print_selected_env, remove_env, remove_env_value, save_request, set_selected_env
 };
 use crate::{
     config::{types::GemonProjectScenario, GemonConfig},
@@ -94,6 +93,10 @@ impl Project {
             .and_modify(|env| env.remove_value(key));
     }
 
+    fn remove_env(&mut self, env: &String) {
+        self.environments.remove_entry(env);
+    }
+
     fn set_selected_env(&mut self, env: &String) -> EmptyResult {
         if !self.environments.contains_key(env) {
             return Err(ProjectError::from("Environment does not exist!"));
@@ -138,8 +141,11 @@ impl Project {
             GemonProjectScenario::Delete(name) => delete_request(name),
             GemonProjectScenario::PrintLastCall => Project::print_last_called_request(),
             GemonProjectScenario::AddEnv(e, k, v) => add_env_value(e, (k.to_owned(), v.to_owned())),
-            GemonProjectScenario::RemoveEnv(e, k) => remove_env_value(e, k),
+            GemonProjectScenario::RemoveEnvValue(e, k) => remove_env_value(e, k),
             GemonProjectScenario::SelectEnv(e) => set_selected_env(e),
+            GemonProjectScenario::PrintEnvAll => print_all_env(), 
+            GemonProjectScenario::PrintEnv => print_selected_env(),
+            GemonProjectScenario::RemoveEnv(e) => remove_env(e),
         }
     }
 

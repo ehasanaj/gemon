@@ -85,6 +85,14 @@ pub fn remove_env_value(env: &String, key: &str) -> EmptyResult {
     project.save()
 }
 
+pub fn remove_env(env: &String) -> EmptyResult {
+    let mut project = get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+    project.remove_env(env);
+    project.save()
+}
+
 pub fn set_selected_env(env: &String) -> EmptyResult {
     let mut project = get_project().ok_or(ProjectError {
         message: String::from("Project not found!"),
@@ -95,6 +103,25 @@ pub fn set_selected_env(env: &String) -> EmptyResult {
 
 pub fn get_selected_env() -> Option<Environment> {
     get_project().and_then(|p| p.get_selected_env())
+}
+
+pub fn print_selected_env() -> EmptyResult {
+    let project = get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+    let selected_env = project.get_selected_env().ok_or(ProjectError { message: String::from("Selected env not set!")})?.values();
+    let result = serde_json::to_string_pretty(&selected_env)?;
+    println!("{}", result);
+    Ok(())
+}
+
+pub fn print_all_env() -> EmptyResult {
+    let project = get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+    let result = serde_json::to_string_pretty(&project.environments)?;
+    println!("{}", result);
+    Ok(())
 }
 
 #[cfg(test)]

@@ -46,6 +46,12 @@ impl GemonArgumentParser for String {
     fn parse_argument(self) -> Option<GemonArgument> {
         match self.as_str() {
             "init" => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
+            "print-env-all" => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::PrintEnvAll,
+            )),
+            "print-env" => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::PrintEnv,
+            )),
             "print" => Some(GemonArgument::ProjectSetup(
                 GemonProjectScenario::PrintLastCall,
             )),
@@ -123,6 +129,12 @@ impl GemonArgumentParser for String {
             s if s.starts_with("--delete=") => Some(GemonArgument::ProjectSetup(
                 GemonProjectScenario::Delete(simple_arg_parser(s, 9)),
             )),
+            s if s.starts_with("-ed=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::RemoveEnv(simple_arg_parser(s, 4)),
+            )),
+            s if s.starts_with("--env-delete=") => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::RemoveEnv(simple_arg_parser(s, 13)),
+            )),
             s if s.starts_with("-e=") => {
                 let (one, two, three) = triple_value_arg_parser(s, 3);
                 Some(GemonArgument::ProjectSetup(GemonProjectScenario::AddEnv(
@@ -135,16 +147,16 @@ impl GemonArgumentParser for String {
                     one, two, three,
                 )))
             }
-            s if s.starts_with("-ed=") => {
-                let (one, two) = key_value_pair_arg_parser(s, 4);
+            s if s.starts_with("-edv=") => {
+                let (one, two) = key_value_pair_arg_parser(s, 5);
                 Some(GemonArgument::ProjectSetup(
-                    GemonProjectScenario::RemoveEnv(one, two),
+                    GemonProjectScenario::RemoveEnvValue(one, two),
                 ))
             }
-            s if s.starts_with("-env-delete=") => {
-                let (one, two) = key_value_pair_arg_parser(s, 12);
+            s if s.starts_with("-env-delete-value=") => {
+                let (one, two) = key_value_pair_arg_parser(s, 18);
                 Some(GemonArgument::ProjectSetup(
-                    GemonProjectScenario::RemoveEnv(one, two),
+                    GemonProjectScenario::RemoveEnvValue(one, two),
                 ))
             }
             s if s.starts_with("-se=") => Some(GemonArgument::ProjectSetup(
