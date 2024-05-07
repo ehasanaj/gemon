@@ -8,11 +8,11 @@ impl Effector {
             Some(env) => {
                 let mut args = args;
                 for (key, value) in env.values() {
-                    let formated_key = format!("${{{}}}", key);
+                    let formated_key = format!("{{{}}}", key);
                     args = args
                         .into_iter()
                         .map(|arg| arg.replace(&formated_key, &value))
-                        .collect()
+                        .collect();
                 }
                 args
             }
@@ -25,7 +25,7 @@ impl Effector {
             Some(env) => {
                 let mut text = text;
                 for (key, value) in env.values() {
-                    let formated_key = format!("${{{}}}", key);
+                    let formated_key = format!("{{{}}}", key);
                     text = text.replace(&formated_key, &value);
                 }
                 text
