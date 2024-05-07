@@ -1,4 +1,5 @@
 use crate::config::{arguments::GemonArguments, types::GemonScenario, GemonConfig};
+use config::effector::Effector;
 use project::Project;
 use request::Request;
 use std::error::Error;
@@ -12,6 +13,8 @@ mod request;
 type EmptyResult = Result<(), Box<dyn Error>>;
 
 pub async fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    // Apply env
+    let args = Effector::apply_env_to_args(args);
     // Parse arguments
     let gemon_arguments = GemonArguments::new(args)?;
     // Create configuration based on arguments

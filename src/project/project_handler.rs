@@ -1,5 +1,6 @@
-use super::{Project, ProjectError};
+use super::{Environment, Project, ProjectError};
 use crate::{
+    config::effector::Effector,
     constants::PROJECT_ROOT_FILE,
     request::request_builder::{GemonRequest, RequestBuilder},
     EmptyResult,
@@ -51,9 +52,13 @@ pub fn get_request(name: &String) -> Box<impl GemonRequest> {
         .unwrap_or_else(|_| panic!("Could not find saved request with name: {}", name));
     let request_type =
         fs::read_to_string(format!("{name}/.marker")).expect("Could not read dir marker");
-    let metadata_json = fs::read_to_string(format!("{name}/metadata.json"))
-        .expect("Could not read metadata json file for request");
-    let body_json = fs::read_to_string(format!("{name}/body.json")).ok();
+    let metadata_json = Effector::apply_env_to_string(
+        fs::read_to_string(format!("{name}/metadata.json"))
+            .expect("Could not read metadata json file for request"),
+    );
+    let body_json = fs::read_to_string(format!("{name}/body.json"))
+        .and_then(|bj| Ok(Effector::apply_env_to_string(bj)))
+        .ok();
     let mut request = RequestBuilder::build_from_string(&metadata_json, &request_type);
     request.set_body(body_json);
     request
@@ -86,6 +91,10 @@ pub fn set_selected_env(env: &String) -> EmptyResult {
     })?;
     project.set_selected_env(env)?;
     project.save()
+}
+
+pub fn get_selected_env() -> Option<Environment> {
+    get_project().and_then(|p| p.get_selected_env())
 }
 
 #[cfg(test)]

@@ -1,5 +1,6 @@
 use self::project_handler::{
-    add_env_value, delete_request, get_request, remove_env_value, save_request, set_selected_env,
+    add_env_value, delete_request, get_request, get_selected_env, remove_env_value, save_request,
+    set_selected_env,
 };
 use crate::{
     config::{types::GemonProjectScenario, GemonConfig},
@@ -14,8 +15,8 @@ use std::{collections::HashMap, error::Error, fmt, fs, io::stdin};
 
 mod project_handler;
 
-#[derive(Serialize, Deserialize)]
-struct Environment {
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Environment {
     values: HashMap<String, String>,
 }
 
@@ -35,6 +36,10 @@ impl Environment {
 
     fn remove_value(&mut self, key: &str) {
         self.values.remove_entry(key);
+    }
+
+    pub fn values(&self) -> HashMap<String, String> {
+        self.values.clone()
     }
 }
 
@@ -97,9 +102,20 @@ impl Project {
         Ok(())
     }
 
+    fn get_selected_env(&self) -> Option<Environment> {
+        match self.selected_environment.as_ref() {
+            Some(env) => self.environments.get(env).map(|e| e.clone()),
+            None => None,
+        }
+    }
+
     fn save(&self) -> EmptyResult {
         let project_str = serde_json::to_string_pretty(&self)?;
         fs::write(PROJECT_ROOT_FILE, project_str).map_err(|err| err.into())
+    }
+
+    pub fn env() -> Option<Environment> {
+        get_selected_env()
     }
 
     pub async fn execute(config: &GemonConfig, scenario: &GemonProjectScenario) -> EmptyResult {

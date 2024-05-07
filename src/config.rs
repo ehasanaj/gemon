@@ -9,6 +9,7 @@ use std::{collections::HashMap, io};
 use self::types::GemonProjectScenario;
 
 pub mod arguments;
+pub mod effector;
 pub mod parser;
 pub mod types;
 
