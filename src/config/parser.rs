@@ -8,7 +8,7 @@ fn simple_arg_parser(s: &str, i: usize) -> String {
 
 fn key_value_pair_arg_parser(s: &str, i: usize) -> (String, String) {
     let key_value = &s[i..];
-    let arg: Vec<&str> = key_value.split(':').collect();
+    let arg: Vec<&str> = key_value.split("::").collect();
     let key = arg
         .first()
         .expect("arg key not provided correctly e.x `-h=key:value`")
@@ -22,7 +22,7 @@ fn key_value_pair_arg_parser(s: &str, i: usize) -> (String, String) {
 
 fn triple_value_arg_parser(s: &str, i: usize) -> (String, String, String) {
     let group = &s[i..];
-    let arg: Vec<&str> = group.split(':').collect();
+    let arg: Vec<&str> = group.split("::").collect();
     let one = arg
         .first()
         .expect("arg one not provided correctly for triple touple e.x `-[e]=one:two:three`")
