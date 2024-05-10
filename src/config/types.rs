@@ -20,6 +20,7 @@ pub enum GemonProjectScenario {
     RemoveEnvValue(String, String),
     RemoveEnv(String),
     SelectEnv(String),
+    Help,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

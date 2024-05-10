@@ -4,6 +4,7 @@ use project::Project;
 use request::Request;
 use std::error::Error;
 
+mod command;
 mod config;
 mod constants;
 mod printer;

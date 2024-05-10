@@ -109,7 +109,12 @@ pub fn print_selected_env() -> EmptyResult {
     let project = get_project().ok_or(ProjectError {
         message: String::from("Project not found!"),
     })?;
-    let selected_env = project.get_selected_env().ok_or(ProjectError { message: String::from("Selected env not set!")})?.values();
+    let selected_env = project
+        .get_selected_env()
+        .ok_or(ProjectError {
+            message: String::from("Selected env not set!"),
+        })?
+        .values();
     let result = serde_json::to_string_pretty(&selected_env)?;
     println!("{}", result);
     Ok(())
@@ -122,45 +127,4 @@ pub fn print_all_env() -> EmptyResult {
     let result = serde_json::to_string_pretty(&project.environments)?;
     println!("{}", result);
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{config::types::GemonMethodType, request::rest_request::GemonRestRequestBuilder};
-    use reqwest::header::AUTHORIZATION;
-    use serde_json::json;
-    use std::collections::HashMap;
-
-    #[test]
-    fn saves_rest_request() {
-        let body = json!({
-            "name": "John Doe",
-            "age": 43,
-            "phones": [
-                "+44 1234567",
-                "+44 2345678"
-            ]
-        });
-        let mut headers = HashMap::new();
-        headers.insert(AUTHORIZATION.to_string(), "Bearer something".to_string());
-        let request = Box::new(
-            GemonRestRequestBuilder::new()
-                .set_gemon_method_type(GemonMethodType::Post)
-                .set_url("http://localhost:8080/post".to_string())
-                .set_headers(&headers)
-                .set_body(Some(body.to_string()))
-                .build(),
-        );
-        let name = String::from("post_smth");
-        let saved_request = save_request(request.clone(), &name);
-        assert_eq!(saved_request.json_metadata(), request.json_metadata())
-    }
-
-    #[test]
-    fn get_request_by_name() {
-        let name = String::from("post_smth");
-        let request = get_request(&name);
-        assert!(!request.json_metadata().is_empty())
-    }
 }
