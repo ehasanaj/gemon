@@ -12,11 +12,11 @@ fn key_value_pair_arg_parser(s: &str, i: usize) -> (String, String) {
     let arg: Vec<&str> = key_value.split("::").collect();
     let key = arg
         .first()
-        .expect("arg key not provided correctly e.x `-h=key:value`")
+        .expect("arg key not provided correctly e.x `-h=key::value`")
         .to_string();
     let value = arg
         .get(1)
-        .expect("arg value not provided correctly e.x `-h=key:value`")
+        .expect("arg value not provided correctly e.x `-h=key::value`")
         .to_string();
     (key, value)
 }
@@ -26,15 +26,15 @@ fn triple_value_arg_parser(s: &str, i: usize) -> (String, String, String) {
     let arg: Vec<&str> = group.split("::").collect();
     let one = arg
         .first()
-        .expect("arg one not provided correctly for triple touple e.x `-[e]=one:two:three`")
+        .expect("arg one not provided correctly for triple touple e.x `-[e]=one::two::three`")
         .to_string();
     let two = arg
         .get(1)
-        .expect("arg two not provided correctly for triple touple e.x `-[e]=one:two:three`")
+        .expect("arg two not provided correctly for triple touple e.x `-[e]=one::two::three`")
         .to_string();
     let three = arg
         .get(2)
-        .expect("arg three not provided correctly for triple touple e.x `-[e]=one:two:three`")
+        .expect("arg three not provided correctly for triple touple e.x `-[e]=one::two::three`")
         .to_string();
     (one, two, three)
 }

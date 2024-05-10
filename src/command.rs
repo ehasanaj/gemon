@@ -1,3 +1,5 @@
+use colored::Colorize;
+
 use crate::EmptyResult;
 
 #[derive(Debug)]
@@ -94,15 +96,80 @@ impl From<String> for GemonCommand {
 
 impl GemonCommand {
     pub fn print_all() -> EmptyResult {
-        println!("      ------------------Gemon Commands--------------------");
+        let info_separator = "------------------Gemon Info--------------------";
+        println!("{}", info_separator.red().bold());
+        GemonCommand::print_info("* In the commands displayed below the parenthesis () are to show that instead of the values show here you would provide your own values. The parenthesis themselves are also not needed");
+        GemonCommand::print_info("* If you need to pass values that have spaces you need to enclose the whole value in quotation marks \" or '");
+        GemonCommand::print_info("* When saving a rest response which accepts a request body, inside the folder with the name of the request an empty body.json will be created where you can put the request body if needed");
+        GemonCommand::print_info("* Gemon allows env variables to be saved and then used, if an variabled called 'base_uri' is saved it can be used: -u={base_uri}/path .Env variables can be used in uri, headers, form data and request body");
+        let commands_separator = "------------------Gemon Commands--------------------";
+        println!("{}", commands_separator.red().bold());
         GemonCommand::print_command("-h | --h", "Print the list of command options in terminal");
-        GemonCommand::print_command("init", "Initialize current forlder into a gemon project");
-        GemonCommand::print_command("print-env-all", "Print all environments with their assosiated variables");
-        println!("      ------------------Gemon Commands--------------------");
+        GemonCommand::print_command("init", "Initialize current folder into a gemon project");
+        GemonCommand::print_command(
+            "print-env-all",
+            "Print all environments with their assosiated variables",
+        );
+        GemonCommand::print_command("print-env", "Print values of the current environment");
+        GemonCommand::print_command(
+            "print",
+            "Print the last call response that was stored in the file",
+        );
+        GemonCommand::print_command("-t=(REST | WEBSOCKET | PROTO)", "Set the type of request");
+        GemonCommand::print_command(
+            "-m=(GET | POST | DELETE | PUT | PATCH)",
+            "Set the type of REST method | Required: -t=REST",
+        );
+        GemonCommand::print_command(
+            "-f | --file",
+            "Save the response of the call to the default response.json file",
+        );
+        GemonCommand::print_command(
+            "-l | --log",
+            "If set the response file name is tagged with the timestamp",
+        );
+        GemonCommand::print_command(
+            "-p | --print",
+            "Save the response to the response file but also print it to terminal",
+        );
+        GemonCommand::print_command(
+            "-u=(https://api.com:8080) | --uri=(https://api.com:8080)",
+            "Set the URI of the request",
+        );
+        GemonCommand::print_command(
+            "-h=(key::value) | --header=(key::value)",
+            "Set a header to the request",
+        );
+        GemonCommand::print_command(
+            "-b=('{\"name\": \"some name\"}') | --body=('{\"name\": \"some name\"}')",
+            "Set the body of the request",
+        );
+        GemonCommand::print_command(
+            "-fd=(key:value) | --form-data=(key:value)",
+            "Set a form data parameter to the request",
+        );
+        GemonCommand::print_command("-rf=(file_name.json) | --response-file=(file_name.json)", "Print the response to the provided file name");
+        GemonCommand::print_command("-s | --save", "Save the response into the project so it can be called later");
+        GemonCommand::print_command("-c=(login) | --call=(login)", "Calls a previously saved request by providing the name with which it was saved");
+        GemonCommand::print_command("-sc=(login) | --save-and-call=(login)", "Simultaneusly it saves a new request and calles it");
+        GemonCommand::print_command("-d=(login) | --delete=(login)", "Removes a previously saved request");
+        GemonCommand::print_command("-e=(int::base_uri::https://api.com) | --env=(int::base_uri::https://api.com)", "Saves a new env value into the project. If the env on which the new value it is being saved does not exist the environment is also created");
+        GemonCommand::print_command("-ed=(int) | --env-delete=(int)", "Removes a previously saved environment");
+        GemonCommand::print_command("-edv=(int::key) | --env-delete-value=(int::key)", "Removes an env variable from one of the environments");
+        GemonCommand::print_command("-se=(int) | --select-env=(int)", "Set an previously created environment as the current environment");
+
         Ok(())
     }
 
     fn print_command(cmd: &str, description: &str) {
-        println!("      {} => {}", cmd, description);
+        println!(
+            "{} => {}",
+            cmd.green().bold(),
+            description.blue().italic()
+        );
+    }
+
+    fn print_info(info: &str) {
+        println!("{}", info.yellow().italic());
     }
 }

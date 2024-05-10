@@ -3,7 +3,13 @@ use self::project_handler::{
     print_selected_env, remove_env, remove_env_value, save_request, set_selected_env,
 };
 use crate::{
-    command::GemonCommand, config::{types::GemonProjectScenario, GemonConfig}, constants::PROJECT_ROOT_FILE, printer::terminal_printer::TerminalPrinter, project::project_handler::get_project, request::{request_builder::RequestBuilder, Request}, EmptyResult
+    command::GemonCommand,
+    config::{types::GemonProjectScenario, GemonConfig},
+    constants::PROJECT_ROOT_FILE,
+    printer::terminal_printer::TerminalPrinter,
+    project::project_handler::get_project,
+    request::{request_builder::RequestBuilder, Request},
+    EmptyResult,
 };
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt, fs, io::stdin};
