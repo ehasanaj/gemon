@@ -24,7 +24,7 @@ pub async fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     match gemon_config.gemon_scenario() {
         GemonScenario::Request => Request::execute(&gemon_config).await,
         GemonScenario::Project(project_scenario) => {
-            Project::execute(&gemon_config, project_scenario).await
+            Project::execute(&gemon_config, &project_scenario).await
         }
     }
 }
