@@ -19,16 +19,24 @@ pub enum GemonArgument {
     AlsoPrintToTerminal,
 }
 
+impl Default for GemonArgument {
+    fn default() -> Self {
+        GemonArgument::ProjectSetup(GemonProjectScenario::Help)
+    }
+}
+
 #[derive(Debug)]
 pub struct GemonArguments {
     arguments: Vec<GemonArgument>,
 }
 
-impl GemonArguments {
-    pub fn default() -> GemonArguments {
-        GemonArguments { arguments: vec![GemonArgument::ProjectSetup(GemonProjectScenario::Help)] }
+impl Default for GemonArguments {
+    fn default() -> Self {
+        GemonArguments { arguments: vec![GemonArgument::default()] }
     }
+}
 
+impl GemonArguments {
     pub fn new(input_args: Vec<String>) -> Result<GemonArguments, io::Error> {
         if input_args.len() < 2 {
             return Ok(GemonArguments::default())
