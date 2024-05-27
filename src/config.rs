@@ -69,7 +69,7 @@ impl GemonConfigBuilder {
             GemonArgument::AlsoPrintToTerminal => self.also_print_to_terminal = true,
             GemonArgument::MiscScenario(scenario) => {
                 self.gemon_scenario = GemonScenario::Misc(scenario.clone())
-            } 
+            }
         }
     }
 

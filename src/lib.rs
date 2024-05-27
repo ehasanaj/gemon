@@ -8,10 +8,10 @@ use std::error::Error;
 mod command;
 mod config;
 mod constants;
+mod misc;
 mod printer;
 mod project;
 mod request;
-mod misc;
 
 type EmptyResult = Result<(), Box<dyn Error>>;
 
@@ -28,6 +28,6 @@ pub async fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
         GemonScenario::Project(project_scenario) => {
             Project::execute(&gemon_config, &project_scenario).await
         }
-        GemonScenario::Misc(misc_scenario) => Misc::execute(misc_scenario) 
+        GemonScenario::Misc(misc_scenario) => Misc::execute(misc_scenario),
     }
 }

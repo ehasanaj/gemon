@@ -7,7 +7,7 @@ impl Misc {
         println!("Gemon version: {}", env!("CARGO_PKG_VERSION"));
     }
 
-    pub fn execute(scenario: &MiscScenario) -> EmptyResult{
+    pub fn execute(scenario: &MiscScenario) -> EmptyResult {
         match scenario {
             MiscScenario::Version => Ok(Self::version()),
         }

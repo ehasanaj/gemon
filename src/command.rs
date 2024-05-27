@@ -106,7 +106,10 @@ impl GemonCommand {
         GemonCommand::print_info("* Gemon allows env variables to be saved and then used, if an variabled called 'base_uri' is saved it can be used: -u={base_uri}/path .Env variables can be used in uri, headers, form data and request body");
         let commands_separator = "------------------Gemon Commands--------------------";
         println!("{}", commands_separator.red().bold());
-        GemonCommand::print_command("-h | --help", "Print the list of command options in terminal");
+        GemonCommand::print_command(
+            "-h | --help",
+            "Print the list of command options in terminal",
+        );
         GemonCommand::print_command("-v | --version", "Pring gemon version info");
         GemonCommand::print_command("init", "Initialize current folder into a gemon project");
         GemonCommand::print_command(
@@ -151,25 +154,45 @@ impl GemonCommand {
             "-fd=(key:value) | --form-data=(key:value)",
             "Set a form data parameter to the request",
         );
-        GemonCommand::print_command("-rf=(file_name.json) | --response-file=(file_name.json)", "Print the response to the provided file name");
-        GemonCommand::print_command("-s | --save", "Save the response into the project so it can be called later");
-        GemonCommand::print_command("-c=(login) | --call=(login)", "Calls a previously saved request by providing the name with which it was saved");
-        GemonCommand::print_command("-sc=(login) | --save-and-call=(login)", "Simultaneusly it saves a new request and calles it");
-        GemonCommand::print_command("-d=(login) | --delete=(login)", "Removes a previously saved request");
+        GemonCommand::print_command(
+            "-rf=(file_name.json) | --response-file=(file_name.json)",
+            "Print the response to the provided file name",
+        );
+        GemonCommand::print_command(
+            "-s | --save",
+            "Save the response into the project so it can be called later",
+        );
+        GemonCommand::print_command(
+            "-c=(login) | --call=(login)",
+            "Calls a previously saved request by providing the name with which it was saved",
+        );
+        GemonCommand::print_command(
+            "-sc=(login) | --save-and-call=(login)",
+            "Simultaneusly it saves a new request and calles it",
+        );
+        GemonCommand::print_command(
+            "-d=(login) | --delete=(login)",
+            "Removes a previously saved request",
+        );
         GemonCommand::print_command("-e=(int::base_uri::https://api.com) | --env=(int::base_uri::https://api.com)", "Saves a new env value into the project. If the env on which the new value it is being saved does not exist the environment is also created");
-        GemonCommand::print_command("-ed=(int) | --env-delete=(int)", "Removes a previously saved environment");
-        GemonCommand::print_command("-edv=(int::key) | --env-delete-value=(int::key)", "Removes an env variable from one of the environments");
-        GemonCommand::print_command("-se=(int) | --select-env=(int)", "Set an previously created environment as the current environment");
+        GemonCommand::print_command(
+            "-ed=(int) | --env-delete=(int)",
+            "Removes a previously saved environment",
+        );
+        GemonCommand::print_command(
+            "-edv=(int::key) | --env-delete-value=(int::key)",
+            "Removes an env variable from one of the environments",
+        );
+        GemonCommand::print_command(
+            "-se=(int) | --select-env=(int)",
+            "Set an previously created environment as the current environment",
+        );
 
         Ok(())
     }
 
     fn print_command(cmd: &str, description: &str) {
-        println!(
-            "{} => {}",
-            cmd.green().bold(),
-            description.blue().italic()
-        );
+        println!("{} => {}", cmd.green().bold(), description.blue().italic());
     }
 
     fn print_info(info: &str) {

@@ -32,14 +32,16 @@ pub struct GemonArguments {
 
 impl Default for GemonArguments {
     fn default() -> Self {
-        GemonArguments { arguments: vec![GemonArgument::default()] }
+        GemonArguments {
+            arguments: vec![GemonArgument::default()],
+        }
     }
 }
 
 impl GemonArguments {
     pub fn new(input_args: Vec<String>) -> Result<GemonArguments, io::Error> {
         if input_args.len() < 2 {
-            return Ok(GemonArguments::default())
+            return Ok(GemonArguments::default());
         }
 
         let arguments = input_args
