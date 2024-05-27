@@ -3,6 +3,7 @@ use serde_derive::{Deserialize, Serialize};
 #[derive(Debug)]
 pub enum GemonScenario {
     Request,
+    Misc(MiscScenario),
     Project(GemonProjectScenario),
 }
 
@@ -21,6 +22,11 @@ pub enum GemonProjectScenario {
     RemoveEnv(String),
     SelectEnv(String),
     Help,
+}
+
+#[derive(Debug, Clone)]
+pub enum MiscScenario {
+    Version,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

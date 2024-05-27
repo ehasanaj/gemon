@@ -2,6 +2,8 @@ use crate::command::{Form, GemonCommand};
 use crate::config::arguments::GemonArgument;
 use crate::config::types::{GemonMethodType, GemonProjectScenario, GemonType};
 
+use super::types::MiscScenario;
+
 fn simple_arg_parser(s: &str, i: usize) -> String {
     let arg = &s[i..];
     arg.to_string()
@@ -48,6 +50,7 @@ impl GemonArgumentParser for String {
         let cmd: GemonCommand = self.into();
         match cmd {
             GemonCommand::Help => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Help)),
+            GemonCommand::Version => Some(GemonArgument::MiscScenario(MiscScenario::Version)),
             GemonCommand::Init(_) => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
             GemonCommand::PrintEnvAll(_) => Some(GemonArgument::ProjectSetup(
                 GemonProjectScenario::PrintEnvAll,

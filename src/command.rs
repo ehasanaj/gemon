@@ -12,6 +12,7 @@ pub enum Form {
 pub enum GemonCommand {
     Invalid,
     Help,
+    Version,
     Init(String),
     PrintEnvAll(String),
     PrintEnv(String),
@@ -46,6 +47,7 @@ impl From<String> for GemonCommand {
     fn from(cmd: String) -> Self {
         match cmd.as_str() {
             "-h" | "--help" => GemonCommand::Help,
+            "-v" | "--version" => GemonCommand::Version,
             "init" => GemonCommand::Init(cmd),
             "print-env-all" => GemonCommand::PrintEnvAll(cmd),
             "print-env" => GemonCommand::PrintEnv(cmd),
@@ -104,7 +106,8 @@ impl GemonCommand {
         GemonCommand::print_info("* Gemon allows env variables to be saved and then used, if an variabled called 'base_uri' is saved it can be used: -u={base_uri}/path .Env variables can be used in uri, headers, form data and request body");
         let commands_separator = "------------------Gemon Commands--------------------";
         println!("{}", commands_separator.red().bold());
-        GemonCommand::print_command("-h | --h", "Print the list of command options in terminal");
+        GemonCommand::print_command("-h | --help", "Print the list of command options in terminal");
+        GemonCommand::print_command("-v | --version", "Pring gemon version info");
         GemonCommand::print_command("init", "Initialize current folder into a gemon project");
         GemonCommand::print_command(
             "print-env-all",

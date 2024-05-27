@@ -2,7 +2,7 @@ use crate::config::parser::GemonArgumentParser;
 use crate::config::types::{GemonMethodType, GemonType};
 use std::io;
 
-use super::types::GemonProjectScenario;
+use super::types::{GemonProjectScenario, MiscScenario};
 
 #[derive(Debug)]
 pub enum GemonArgument {
@@ -14,6 +14,7 @@ pub enum GemonArgument {
     FormData(String, String),
     ResponseFilePath(Option<String>),
     ProjectSetup(GemonProjectScenario),
+    MiscScenario(MiscScenario),
     LogResponse,
     AlsoPrintToTerminal,
 }
