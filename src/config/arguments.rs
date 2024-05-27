@@ -24,7 +24,15 @@ pub struct GemonArguments {
 }
 
 impl GemonArguments {
+    pub fn default() -> GemonArguments {
+        GemonArguments { arguments: vec![GemonArgument::ProjectSetup(GemonProjectScenario::Help)] }
+    }
+
     pub fn new(input_args: Vec<String>) -> Result<GemonArguments, io::Error> {
+        if input_args.len() < 2 {
+            return Ok(GemonArguments::default())
+        }
+
         let arguments = input_args
             .into_iter()
             .map(|arg| arg.parse_argument())
