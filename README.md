@@ -191,13 +191,7 @@ gemon -t=REST -m=GET -u=https://api.example.com/data -h=Authorization::Bearer yo
 
 ## Contributing
 
-Gemon is an open-source project, and contributions are welcome! To contribute, please follow these steps:
-
-* Fork the repository.
-* Create a new branch (git checkout -b feature/your-feature).
-* Make your changes and commit them (git commit -m 'Add some feature').
-* Push to the branch (git push origin feature/your-feature).
-* Open a pull request.
+Gemon is an open-source project, and contributions are welcome! To contribute, please follow refere to CONTRIBUTING.md
 
 ## License
 
