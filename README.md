@@ -82,6 +82,12 @@ Select a previously created environment as the current environment:
 gemon -se=(env_name)
 ```
 
+Remove authorization for selcted env (if no env selcted remove default authorization)
+
+```sh
+gemon -r-auth | --remove-authorization
+```
+
 ### Making API Calls
 
 Set the request type:
@@ -118,6 +124,18 @@ Set a form data parameter:
 
 ```sh
 gemon -fd=(key:value) | --form-data=(key:value)
+```
+
+Set authorization for selected env (if no env selected set default authorization)
+
+```sh
+gemon -auth='Bearer token...' | --authorization='Bearer token...'
+```
+
+Mark request secured that needs to be authorized
+
+```sh
+gemon -sec | --secure
 ```
 
 ### Response Handling

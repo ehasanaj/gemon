@@ -21,6 +21,8 @@ pub enum GemonProjectScenario {
     RemoveEnvValue(String, String),
     RemoveEnv(String),
     SelectEnv(String),
+    RemoveAuthorization,
+    AddAuthorization(String),
     Help,
 }
 

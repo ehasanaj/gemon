@@ -41,6 +41,9 @@ pub enum GemonCommand {
     AddEnv(String, Form),
     RemoveEnvValue(String, Form),
     SelectEnv(String, Form),
+    AddAuthorization(String, Form),
+    RemoveAuthorization,
+    Secure,
 }
 
 impl From<String> for GemonCommand {
@@ -63,6 +66,12 @@ impl From<String> for GemonCommand {
             "-f" | "--file" => GemonCommand::File(cmd),
             "-l" | "--log" => GemonCommand::LogResponse(cmd),
             "-p" | "--print" => GemonCommand::AlsoPrintToTerminal(cmd),
+            "-sec" | "--secure" => GemonCommand::Secure,
+            "-r-auth" | "--remove-authorization" => GemonCommand::RemoveAuthorization,
+            s if s.starts_with("-auth=") => GemonCommand::AddAuthorization(cmd, Form::Short),
+            s if s.starts_with("--authorization=") => {
+                GemonCommand::AddAuthorization(cmd, Form::Long)
+            }
             s if s.starts_with("-u=") => GemonCommand::Uri(cmd, Form::Short),
             s if s.starts_with("--uri=") => GemonCommand::Uri(cmd, Form::Long),
             s if s.starts_with("-h=") => GemonCommand::Header(cmd, Form::Short),
@@ -158,9 +167,10 @@ impl GemonCommand {
             "-rf=(file_name.json) | --response-file=(file_name.json)",
             "Print the response to the provided file name",
         );
+        GemonCommand::print_command("-sec | --secure", "Mark request that it needs to be authorized, authorization is either taken from project or from specific header");
         GemonCommand::print_command(
             "-s | --save",
-            "Save the response into the project so it can be called later",
+            "Save request into the project so it can be called later",
         );
         GemonCommand::print_command(
             "-c=(login) | --call=(login)",
@@ -187,6 +197,8 @@ impl GemonCommand {
             "-se=(int) | --select-env=(int)",
             "Set an previously created environment as the current environment",
         );
+        GemonCommand::print_command("-r-auth | --remove-authorization", "Removes authorziation set for current environment, if no environemnt is set removes the default authoriziation used without environment");
+        GemonCommand::print_command("-auth='Bearer token...' | --authorization='Bearer token...'", "Set authorization for current environment, if no environment is selected it set the default authorization without environment");
 
         Ok(())
     }

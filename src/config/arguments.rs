@@ -17,6 +17,7 @@ pub enum GemonArgument {
     MiscScenario(MiscScenario),
     LogResponse,
     AlsoPrintToTerminal,
+    Secure,
 }
 
 impl Default for GemonArgument {

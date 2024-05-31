@@ -25,6 +25,7 @@ pub struct GemonConfigBuilder {
     response_file_path: Option<String>,
     log_response: bool,
     also_print_to_terminal: bool,
+    secure: bool,
 }
 
 impl GemonConfigBuilder {
@@ -41,6 +42,7 @@ impl GemonConfigBuilder {
             write_to_request_response_file: false,
             log_response: false,
             also_print_to_terminal: false,
+            secure: false,
         }
     }
 
@@ -70,6 +72,7 @@ impl GemonConfigBuilder {
             GemonArgument::MiscScenario(scenario) => {
                 self.gemon_scenario = GemonScenario::Misc(scenario.clone())
             }
+            GemonArgument::Secure => self.secure = true,
         }
     }
 
@@ -119,6 +122,7 @@ impl GemonConfigBuilder {
             form_data: self.form_data,
             response_file_path: path,
             also_print_to_terminal: self.also_print_to_terminal,
+            secure: self.secure,
         }
     }
 }
@@ -135,6 +139,7 @@ pub struct GemonConfig {
     form_data: HashMap<String, String>,
     response_file_path: Option<String>,
     also_print_to_terminal: bool,
+    secure: bool,
 }
 
 impl GemonConfig {
@@ -188,5 +193,9 @@ impl GemonConfig {
 
     pub fn gemon_also_print_to_terminal(&self) -> bool {
         self.also_print_to_terminal
+    }
+
+    pub fn gemon_secure(&self) -> bool {
+        self.secure
     }
 }

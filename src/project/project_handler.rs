@@ -128,3 +128,31 @@ pub fn print_all_env() -> EmptyResult {
     println!("{}", result);
     Ok(())
 }
+
+pub fn add_authorization(authorization: &String) -> EmptyResult {
+    let mut project = get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+    project.set_authorization(authorization)?;
+    project.save()
+}
+
+pub fn remove_authorization() -> EmptyResult {
+    let mut project = get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+    project.remove_authorization()?;
+    project.save()
+}
+
+pub fn authorization() -> Option<String> {
+    let project = get_project()
+        .ok_or(ProjectError {
+            message: String::from("Project not found!"),
+        })
+        .ok();
+    match project {
+        Some(p) => p.authorization().cloned(),
+        None => None,
+    }
+}

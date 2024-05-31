@@ -173,6 +173,16 @@ impl GemonArgumentParser for String {
                 GemonProjectScenario::SelectEnv(simple_arg_parser(&s, 13)),
             )),
             GemonCommand::Invalid => None,
+            GemonCommand::AddAuthorization(s, Form::Short) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::AddAuthorization(simple_arg_parser(&s, 6)),
+            )),
+            GemonCommand::AddAuthorization(s, Form::Long) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::AddAuthorization(simple_arg_parser(&s, 16)),
+            )),
+            GemonCommand::RemoveAuthorization => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::RemoveAuthorization,
+            )),
+            GemonCommand::Secure => Some(GemonArgument::Secure),
         }
     }
 }

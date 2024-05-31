@@ -5,16 +5,17 @@ use self::project_handler::{
 use crate::{
     command::GemonCommand,
     config::{types::GemonProjectScenario, GemonConfig},
-    constants::PROJECT_ROOT_FILE,
+    constants::{NO_ENV, PROJECT_ROOT_FILE},
     printer::terminal_printer::TerminalPrinter,
     project::project_handler::get_project,
     request::{request_builder::RequestBuilder, Request},
     EmptyResult,
 };
+use project_handler::{add_authorization, remove_authorization};
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt, fs, io::stdin};
 
-mod project_handler;
+pub mod project_handler;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Environment {
@@ -70,6 +71,7 @@ pub struct Project {
     name: String,
     selected_environment: Option<String>,
     environments: HashMap<String, Environment>,
+    authorization: HashMap<String, String>,
     last_called_request_path: Option<String>,
 }
 
@@ -123,6 +125,32 @@ impl Project {
         get_selected_env()
     }
 
+    pub fn authorization(&self) -> Option<&String> {
+        let env = match &self.selected_environment {
+            Some(e) => e.to_owned(),
+            None => String::from(NO_ENV),
+        };
+        self.authorization.get(&env)
+    }
+
+    pub fn set_authorization(&mut self, authorization: &String) -> EmptyResult {
+        let env = match &self.selected_environment {
+            Some(e) => e.to_owned(),
+            None => String::from(NO_ENV),
+        };
+        self.authorization.insert(env, authorization.into());
+        Ok(())
+    }
+
+    pub fn remove_authorization(&mut self) -> EmptyResult {
+        let env = match &self.selected_environment {
+            Some(e) => e.to_owned(),
+            None => String::from(NO_ENV),
+        };
+        self.authorization.remove_entry(&env);
+        Ok(())
+    }
+
     pub async fn execute(config: &GemonConfig, scenario: &GemonProjectScenario) -> EmptyResult {
         match scenario {
             GemonProjectScenario::Init => Project::init(),
@@ -149,6 +177,10 @@ impl Project {
             GemonProjectScenario::PrintEnv => print_selected_env(),
             GemonProjectScenario::RemoveEnv(e) => remove_env(e),
             GemonProjectScenario::Help => GemonCommand::print_all(),
+            GemonProjectScenario::RemoveAuthorization => remove_authorization(),
+            GemonProjectScenario::AddAuthorization(authorization) => {
+                add_authorization(authorization)
+            }
         }
     }
 
@@ -170,6 +202,7 @@ impl Project {
             selected_environment: None,
             environments: HashMap::new(),
             last_called_request_path: None,
+            authorization: HashMap::new(),
         };
         project.save()
     }
