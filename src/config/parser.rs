@@ -51,37 +51,37 @@ impl GemonArgumentParser for String {
         match cmd {
             GemonCommand::Help => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Help)),
             GemonCommand::Version => Some(GemonArgument::MiscScenario(MiscScenario::Version)),
-            GemonCommand::Init(_) => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
-            GemonCommand::PrintEnvAll(_) => Some(GemonArgument::ProjectSetup(
+            GemonCommand::Init => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
+            GemonCommand::PrintEnvAll => Some(GemonArgument::ProjectSetup(
                 GemonProjectScenario::PrintEnvAll,
             )),
-            GemonCommand::PrintEnv(_) => {
+            GemonCommand::PrintEnv => {
                 Some(GemonArgument::ProjectSetup(GemonProjectScenario::PrintEnv))
             }
-            GemonCommand::PrintLastCall(_) => Some(GemonArgument::ProjectSetup(
+            GemonCommand::PrintLastCall => Some(GemonArgument::ProjectSetup(
                 GemonProjectScenario::PrintLastCall,
             )),
-            GemonCommand::TypeRest(_) => Some(GemonArgument::Type(GemonType::Rest)),
-            GemonCommand::TypeWebsocket(_) => Some(GemonArgument::Type(GemonType::Websocket)),
-            GemonCommand::TypeProto(_) => Some(GemonArgument::Type(GemonType::Proto)),
-            GemonCommand::MethodGet(_) => Some(GemonArgument::Method {
+            GemonCommand::TypeRest => Some(GemonArgument::Type(GemonType::Rest)),
+            GemonCommand::TypeWebsocket => Some(GemonArgument::Type(GemonType::Websocket)),
+            GemonCommand::TypeProto => Some(GemonArgument::Type(GemonType::Proto)),
+            GemonCommand::MethodGet => Some(GemonArgument::Method {
                 gemon_method_type: GemonMethodType::Get,
             }),
-            GemonCommand::MethodPost(_) => Some(GemonArgument::Method {
+            GemonCommand::MethodPost => Some(GemonArgument::Method {
                 gemon_method_type: GemonMethodType::Post,
             }),
-            GemonCommand::MethodDelete(_) => Some(GemonArgument::Method {
+            GemonCommand::MethodDelete => Some(GemonArgument::Method {
                 gemon_method_type: GemonMethodType::Delete,
             }),
-            GemonCommand::MethodPut(_) => Some(GemonArgument::Method {
+            GemonCommand::MethodPut => Some(GemonArgument::Method {
                 gemon_method_type: GemonMethodType::Put,
             }),
-            GemonCommand::MethodPatch(_) => Some(GemonArgument::Method {
+            GemonCommand::MethodPatch => Some(GemonArgument::Method {
                 gemon_method_type: GemonMethodType::Patch,
             }),
-            GemonCommand::File(_) => Some(GemonArgument::ResponseFilePath(None)),
-            GemonCommand::LogResponse(_) => Some(GemonArgument::LogResponse),
-            GemonCommand::AlsoPrintToTerminal(_) => Some(GemonArgument::AlsoPrintToTerminal),
+            GemonCommand::File => Some(GemonArgument::ResponseFilePath(None)),
+            GemonCommand::LogResponse => Some(GemonArgument::LogResponse),
+            GemonCommand::AlsoPrintToTerminal => Some(GemonArgument::AlsoPrintToTerminal),
             GemonCommand::Uri(s, Form::Short) => Some(GemonArgument::Uri(simple_arg_parser(&s, 3))),
             GemonCommand::Uri(s, Form::Long) => Some(GemonArgument::Uri(simple_arg_parser(&s, 6))),
             GemonCommand::Header(s, Form::Short) => {
