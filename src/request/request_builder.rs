@@ -5,6 +5,7 @@ use crate::{
     project::project_handler::authorization,
 };
 use bytes::Bytes;
+use std::collections::HashMap;
 use std::error::Error;
 
 pub trait GemonRequest {
@@ -17,15 +18,29 @@ pub trait GemonRequest {
 
 pub struct GemonResponse {
     data: Bytes,
+    status: u16,
+    headers: HashMap<String, String>,
 }
 
 impl GemonResponse {
-    pub fn new(data: Bytes) -> GemonResponse {
-        GemonResponse { data }
+    pub fn new(data: Bytes, status: u16, headers: HashMap<String, String>) -> GemonResponse {
+        GemonResponse {
+            data,
+            status,
+            headers,
+        }
     }
 
     pub fn data(&self) -> &Bytes {
         &self.data
+    }
+
+    pub fn status(&self) -> u16 {
+        self.status
+    }
+
+    pub fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
     }
 }
 
@@ -34,7 +49,7 @@ pub struct RequestBuilder;
 impl RequestBuilder {
     fn build_rest_request(config: &GemonConfig) -> Box<GemonRestRequest> {
         let mut headers = config.gemon_headers().clone();
-        if config.gemon_secure() && headers.get(AUTHORIZATION).is_none() {
+        if config.gemon_secure() && !headers.contains_key(AUTHORIZATION) {
             if let Some(authorization) = authorization() {
                 headers.insert(AUTHORIZATION.to_string(), authorization.to_string());
             }

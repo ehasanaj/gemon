@@ -9,7 +9,10 @@ impl Misc {
 
     pub fn execute(scenario: &MiscScenario) -> EmptyResult {
         match scenario {
-            MiscScenario::Version => Ok(Self::version()),
+            MiscScenario::Version => {
+                Self::version();
+                Ok(())
+            }
         }
     }
 }

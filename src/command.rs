@@ -120,6 +120,10 @@ impl GemonCommand {
             "Print the list of command options in terminal",
         );
         GemonCommand::print_command("-v | --version", "Pring gemon version info");
+        GemonCommand::print_command(
+            "tui | --tui | -i | --interactive",
+            "Open the interactive terminal user interface",
+        );
         GemonCommand::print_command("init", "Initialize current folder into a gemon project");
         GemonCommand::print_command(
             "print-env-all",

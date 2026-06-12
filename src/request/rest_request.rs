@@ -6,22 +6,22 @@ use reqwest::{
     header::{self, HeaderMap, ACCEPT, CONTENT_TYPE},
 };
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 
 trait HeaderMapConverter {
-    fn to_header_map(self) -> HeaderMap;
+    fn to_header_map(self) -> Result<HeaderMap, Box<dyn Error>>;
 }
 
 impl HeaderMapConverter for HashMap<String, String> {
-    fn to_header_map(self) -> HeaderMap {
+    fn to_header_map(self) -> Result<HeaderMap, Box<dyn Error>> {
         let mut headers = HeaderMap::new();
         for (key, value) in self {
             headers.insert(
-                header::HeaderName::from_bytes(key.as_bytes()).unwrap(),
-                header::HeaderValue::from_str(&value).unwrap(),
+                header::HeaderName::from_bytes(key.as_bytes())?,
+                header::HeaderValue::from_str(&value)?,
             );
         }
-        headers
+        Ok(headers)
     }
 }
 
@@ -109,6 +109,28 @@ pub struct GemonRestRequest {
     form_data: HashMap<String, String>,
 }
 
+impl GemonRestRequest {
+    pub fn method(&self) -> GemonMethodType {
+        self.gemon_method_type
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
+
+    pub fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
+    }
+
+    pub fn body(&self) -> Option<&str> {
+        self.body.as_deref()
+    }
+
+    pub fn form_data(&self) -> &HashMap<String, String> {
+        &self.form_data
+    }
+}
+
 impl GemonRequest for GemonRestRequest {
     async fn execute(&self) -> Result<GemonResponse, Box<dyn std::error::Error>> {
         let client = reqwest::Client::new();
@@ -123,7 +145,7 @@ impl GemonRequest for GemonRestRequest {
         request = request
             .header(CONTENT_TYPE, constants::DEFAULT_CONTENT_TYPE)
             .header(ACCEPT, constants::DEFAULT_ACCEPT)
-            .headers(self.headers.clone().to_header_map());
+            .headers(self.headers.clone().to_header_map()?);
 
         if !self.form_data.is_empty() {
             request = request.form(&self.form_data);
@@ -134,14 +156,19 @@ impl GemonRequest for GemonRestRequest {
         }
 
         let response = request.send().await?;
-
-        let status = response.error_for_status_ref();
-        if let Some(err) = status.err() {
-            panic!("Request failed with error code {:?}", err.status().unwrap());
-        }
-
+        let status = response.status().as_u16();
+        let headers = response
+            .headers()
+            .iter()
+            .map(|(key, value)| {
+                (
+                    key.as_str().to_string(),
+                    value.to_str().unwrap_or_default().to_string(),
+                )
+            })
+            .collect();
         let response_bytes = response.bytes().await?;
-        Ok(GemonResponse::new(response_bytes))
+        Ok(GemonResponse::new(response_bytes, status, headers))
     }
 
     fn json_metadata(&self) -> String {

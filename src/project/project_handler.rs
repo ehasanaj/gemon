@@ -2,10 +2,19 @@ use super::{Environment, Project, ProjectError};
 use crate::{
     config::effector::Effector,
     constants::PROJECT_ROOT_FILE,
-    request::request_builder::{GemonRequest, RequestBuilder},
+    request::{
+        request_builder::{GemonRequest, RequestBuilder},
+        rest_request::GemonRestRequest,
+    },
     EmptyResult,
 };
-use std::fs;
+use std::{error::Error, fs};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedRequestInfo {
+    pub name: String,
+    pub request_type: String,
+}
 
 fn validate_prject() {
     get_project().expect("Valid Gemon project not found!");
@@ -22,6 +31,60 @@ pub fn get_project() -> Option<Project> {
 
     let project: Project = serde_json::from_str(&project_str).expect("Error parsing project file");
     Some(project)
+}
+
+pub fn create_project(name: &str) -> EmptyResult {
+    Project::init_named(name)
+}
+
+pub fn list_saved_requests() -> Result<Vec<SavedRequestInfo>, Box<dyn Error>> {
+    get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+
+    let mut requests = Vec::new();
+    for entry in fs::read_dir(".")? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let marker_path = path.join(".marker");
+        let metadata_path = path.join("metadata.json");
+        let body_path = path.join("body.json");
+        if !(marker_path.exists() && metadata_path.exists() && body_path.exists()) {
+            continue;
+        }
+
+        let request_type = fs::read_to_string(marker_path)?.trim().to_string();
+        requests.push(SavedRequestInfo {
+            name: entry.file_name().to_string_lossy().to_string(),
+            request_type,
+        });
+    }
+
+    requests.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(requests)
+}
+
+pub fn read_saved_rest_request(name: &str) -> Result<GemonRestRequest, Box<dyn Error>> {
+    get_project().ok_or(ProjectError {
+        message: String::from("Project not found!"),
+    })?;
+
+    let request_type = fs::read_to_string(format!("{name}/.marker"))?;
+    if request_type.trim() != "REST" {
+        return Err(Box::new(ProjectError {
+            message: format!("Saved request '{name}' is not a REST request"),
+        }));
+    }
+
+    let metadata_json = fs::read_to_string(format!("{name}/metadata.json"))?;
+    let body = fs::read_to_string(format!("{name}/body.json")).ok();
+    let mut request: GemonRestRequest = serde_json::from_str(&metadata_json)?;
+    request.set_body(body);
+    Ok(request)
 }
 
 pub fn save_request(request: Box<impl GemonRequest>, name: &String) -> Box<impl GemonRequest> {
@@ -57,7 +120,7 @@ pub fn get_request(name: &String) -> Box<impl GemonRequest> {
             .expect("Could not read metadata json file for request"),
     );
     let body_json = fs::read_to_string(format!("{name}/body.json"))
-        .and_then(|bj| Ok(Effector::apply_env_to_string(bj)))
+        .map(Effector::apply_env_to_string)
         .ok();
     let mut request = RequestBuilder::build_from_string(&metadata_json, &request_type);
     request.set_body(body_json);

@@ -34,6 +34,31 @@ Gemon supports various commands and options for making API requests, managing en
 ```sh
 -h | --help : Print the list of command options in the terminal.
 -v | --version : Print Gemon version information.
+tui | --tui | -i | --interactive : Open the interactive terminal user interface.
+```
+
+### Interactive TUI
+
+Open Gemon's terminal user interface:
+
+```sh
+gemon tui
+```
+
+The TUI provides a project-aware workspace for composing REST requests, loading and saving
+project requests, managing environment variables, setting authorization, sending requests, and
+reviewing response status, duration, size, headers, and formatted bodies.
+
+Useful shortcuts:
+
+```sh
+F1 requests       F2 environments     F3 help
+Tab next field    Shift-Tab previous  Ctrl-C/Ctrl-Q quit
+Ctrl-R send       Ctrl-S save         Ctrl-N new request
+Ctrl-D delete     Ctrl-L reload
+Ctrl-1 saved      Ctrl-2 composer     Ctrl-5 headers
+Ctrl-6 form data  Ctrl-7 body         Ctrl-8 response
+Ctrl-9 env list   Ctrl-0 env values
 ```
 
 ### Project Initialization

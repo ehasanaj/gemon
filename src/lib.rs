@@ -12,10 +12,19 @@ mod misc;
 mod printer;
 mod project;
 mod request;
+mod tui;
 
 type EmptyResult = Result<(), Box<dyn Error>>;
 
 pub async fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
+    if args
+        .get(1)
+        .map(|arg| matches!(arg.as_str(), "tui" | "--tui" | "-i" | "--interactive"))
+        .unwrap_or(false)
+    {
+        return tui::run().await;
+    }
+
     // Apply env
     let args = Effector::apply_env_to_args(args);
     // Parse arguments
@@ -26,8 +35,8 @@ pub async fn run(args: Vec<String>) -> Result<(), Box<dyn Error>> {
     match gemon_config.gemon_scenario() {
         GemonScenario::Request => Request::execute(&gemon_config).await,
         GemonScenario::Project(project_scenario) => {
-            Project::execute(&gemon_config, &project_scenario).await
+            Project::execute(&gemon_config, project_scenario).await
         }
-        GemonScenario::Misc(misc_scenario) => Misc::execute(&misc_scenario),
+        GemonScenario::Misc(misc_scenario) => Misc::execute(misc_scenario),
     }
 }

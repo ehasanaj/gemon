@@ -43,6 +43,10 @@ impl Environment {
     pub fn values(&self) -> HashMap<String, String> {
         self.values.clone()
     }
+
+    pub fn values_ref(&self) -> &HashMap<String, String> {
+        &self.values
+    }
 }
 
 #[derive(Debug)]
@@ -76,6 +80,43 @@ pub struct Project {
 }
 
 impl Project {
+    pub fn init_named(name: &str) -> EmptyResult {
+        if get_project().is_some() {
+            return Err(Box::new(ProjectError {
+                message: String::from("Project already exists"),
+            }));
+        }
+
+        let project = Project {
+            name: name.trim().to_string(),
+            selected_environment: None,
+            environments: HashMap::new(),
+            last_called_request_path: None,
+            authorization: HashMap::new(),
+        };
+        project.save()
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn selected_environment_name(&self) -> Option<&str> {
+        self.selected_environment.as_deref()
+    }
+
+    pub fn environments(&self) -> &HashMap<String, Environment> {
+        &self.environments
+    }
+
+    pub fn authorization_entries(&self) -> &HashMap<String, String> {
+        &self.authorization
+    }
+
+    pub fn last_called_request_path(&self) -> Option<&str> {
+        self.last_called_request_path.as_deref()
+    }
+
     fn set_last_called_request_path(&mut self, path: Option<String>) {
         self.last_called_request_path = path;
     }
@@ -99,6 +140,10 @@ impl Project {
 
     fn remove_env(&mut self, env: &String) {
         self.environments.remove_entry(env);
+        if self.selected_environment.as_ref() == Some(env) {
+            self.selected_environment = None;
+        }
+        self.authorization.remove_entry(env);
     }
 
     fn set_selected_env(&mut self, env: &String) -> EmptyResult {
@@ -111,7 +156,7 @@ impl Project {
 
     fn get_selected_env(&self) -> Option<Environment> {
         match self.selected_environment.as_ref() {
-            Some(env) => self.environments.get(env).map(|e| e.clone()),
+            Some(env) => self.environments.get(env).cloned(),
             None => None,
         }
     }
@@ -185,26 +230,12 @@ impl Project {
     }
 
     fn init() -> EmptyResult {
-        if get_project().is_some() {
-            return Err(Box::new(ProjectError {
-                message: String::from("Project already exists"),
-            }));
-        }
-
         println!("Provide the name of the project:");
         let mut name = String::new();
         stdin()
             .read_line(&mut name)
             .expect("Failed to read project name");
-
-        let project = Project {
-            name: name.trim().to_string(),
-            selected_environment: None,
-            environments: HashMap::new(),
-            last_called_request_path: None,
-            authorization: HashMap::new(),
-        };
-        project.save()
+        Project::init_named(&name)
     }
 
     fn update_last_request_path(path: Option<String>) -> Result<(), Box<dyn Error>> {

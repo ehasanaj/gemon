@@ -143,6 +143,29 @@ pub struct GemonConfig {
 }
 
 impl GemonConfig {
+    pub fn rest_request(
+        method: GemonMethodType,
+        url: String,
+        headers: HashMap<String, String>,
+        body: Option<String>,
+        form_data: HashMap<String, String>,
+        secure: bool,
+    ) -> GemonConfig {
+        GemonConfig {
+            gemon_scenario: GemonScenario::Request,
+            gemon_type: GemonType::Rest,
+            gemon_printer: GemonPrinter::Terminal,
+            gemon_method_type: Some(method),
+            url: Some(url),
+            headers,
+            body,
+            form_data,
+            response_file_path: None,
+            also_print_to_terminal: false,
+            secure,
+        }
+    }
+
     pub fn new(gemon_arguments: &GemonArguments) -> Result<GemonConfig, io::Error> {
         let mut builder = GemonConfigBuilder::new();
 
