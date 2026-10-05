@@ -1,16 +1,20 @@
-use crate::command::{Form, GemonCommand};
+use crate::command::GemonCommand;
 use crate::config::arguments::GemonArgument;
 use crate::config::types::{GemonMethodType, GemonProjectScenario, GemonType};
 
 use super::types::MiscScenario;
 
-fn simple_arg_parser(s: &str, i: usize) -> String {
-    let arg = &s[i..];
-    arg.to_string()
+/// Returns everything after the `=` that ends the flag, e.g. `-u=http://a?b=c` -> `http://a?b=c`.
+fn arg_value(s: &str) -> &str {
+    s.split_once('=').map(|(_, value)| value).unwrap_or_default()
 }
 
-fn key_value_pair_arg_parser(s: &str, i: usize) -> (String, String) {
-    let key_value = &s[i..];
+fn simple_arg_parser(s: &str) -> String {
+    arg_value(s).to_string()
+}
+
+fn key_value_pair_arg_parser(s: &str) -> (String, String) {
+    let key_value = arg_value(s);
     let arg: Vec<&str> = key_value.split("::").collect();
     let key = arg
         .first()
@@ -23,8 +27,8 @@ fn key_value_pair_arg_parser(s: &str, i: usize) -> (String, String) {
     (key, value)
 }
 
-fn triple_value_arg_parser(s: &str, i: usize) -> (String, String, String) {
-    let group = &s[i..];
+fn triple_value_arg_parser(s: &str) -> (String, String, String) {
+    let group = arg_value(s);
     let arg: Vec<&str> = group.split("::").collect();
     let one = arg
         .first()
@@ -85,102 +89,52 @@ impl GemonArgumentParser for String {
             GemonCommand::File => Some(GemonArgument::ResponseFilePath(None)),
             GemonCommand::LogResponse => Some(GemonArgument::LogResponse),
             GemonCommand::AlsoPrintToTerminal => Some(GemonArgument::AlsoPrintToTerminal),
-            GemonCommand::Uri(s, Form::Short) => Some(GemonArgument::Uri(simple_arg_parser(&s, 3))),
-            GemonCommand::Uri(s, Form::Long) => Some(GemonArgument::Uri(simple_arg_parser(&s, 6))),
-            GemonCommand::Header(s, Form::Short) => {
-                let arg = key_value_pair_arg_parser(&s, 3);
-                Some(GemonArgument::Header(arg.0, arg.1))
+            GemonCommand::Uri(s) => Some(GemonArgument::Uri(simple_arg_parser(&s))),
+            GemonCommand::Header(s) => {
+                let (key, value) = key_value_pair_arg_parser(&s);
+                Some(GemonArgument::Header(key, value))
             }
-            GemonCommand::Header(s, Form::Long) => {
-                let arg = key_value_pair_arg_parser(&s, 9);
-                Some(GemonArgument::Header(arg.0, arg.1))
+            GemonCommand::Body(s) => Some(GemonArgument::Body(simple_arg_parser(&s))),
+            GemonCommand::FormData(s) => {
+                let (key, value) = key_value_pair_arg_parser(&s);
+                Some(GemonArgument::FormData(key, value))
             }
-            GemonCommand::Body(s, Form::Short) => {
-                Some(GemonArgument::Body(simple_arg_parser(&s, 3)))
+            GemonCommand::ResponseFile(s) => {
+                Some(GemonArgument::ResponseFilePath(Some(simple_arg_parser(&s))))
             }
-            GemonCommand::Body(s, Form::Long) => {
-                Some(GemonArgument::Body(simple_arg_parser(&s, 6)))
-            }
-            GemonCommand::FormData(s, Form::Short) => {
-                let arg = key_value_pair_arg_parser(&s, 4);
-                Some(GemonArgument::FormData(arg.0, arg.1))
-            }
-            GemonCommand::FormData(s, Form::Long) => {
-                let arg = key_value_pair_arg_parser(&s, 12);
-                Some(GemonArgument::FormData(arg.0, arg.1))
-            }
-            GemonCommand::ResponseFile(s, Form::Short) => Some(GemonArgument::ResponseFilePath(
-                Some(simple_arg_parser(&s, 4)),
+            GemonCommand::Save(s) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Save(simple_arg_parser(&s)),
             )),
-            GemonCommand::ResponseFile(s, Form::Long) => Some(GemonArgument::ResponseFilePath(
-                Some(simple_arg_parser(&s, 16)),
+            GemonCommand::Call(s) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Call(simple_arg_parser(&s)),
             )),
-            GemonCommand::Save(s, Form::Short) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::Save(simple_arg_parser(&s, 3)),
+            GemonCommand::SaveAndCall(s) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::SaveAndCall(simple_arg_parser(&s)),
             )),
-            GemonCommand::Save(s, Form::Long) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::Save(simple_arg_parser(&s, 7)),
+            GemonCommand::Delete(s) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::Delete(simple_arg_parser(&s)),
             )),
-            GemonCommand::Call(s, Form::Short) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::Call(simple_arg_parser(&s, 3)),
+            GemonCommand::RemoveEnv(s) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::RemoveEnv(simple_arg_parser(&s)),
             )),
-            GemonCommand::Call(s, Form::Long) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::Call(simple_arg_parser(&s, 7)),
-            )),
-            GemonCommand::SaveAndCall(s, Form::Short) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::SaveAndCall(simple_arg_parser(&s, 3)),
-            )),
-            GemonCommand::SaveAndCall(s, Form::Long) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::SaveAndCall(simple_arg_parser(&s, 7)),
-            )),
-            GemonCommand::Delete(s, Form::Short) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::Delete(simple_arg_parser(&s, 3)),
-            )),
-            GemonCommand::Delete(s, Form::Long) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::Delete(simple_arg_parser(&s, 9)),
-            )),
-            GemonCommand::RemoveEnv(s, Form::Short) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::RemoveEnv(simple_arg_parser(&s, 4)),
-            )),
-            GemonCommand::RemoveEnv(s, Form::Long) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::RemoveEnv(simple_arg_parser(&s, 13)),
-            )),
-            GemonCommand::AddEnv(s, Form::Short) => {
-                let (one, two, three) = triple_value_arg_parser(&s, 3);
+            GemonCommand::AddEnv(s) => {
+                let (one, two, three) = triple_value_arg_parser(&s);
                 Some(GemonArgument::ProjectSetup(GemonProjectScenario::AddEnv(
                     one, two, three,
                 )))
             }
-            GemonCommand::AddEnv(s, Form::Long) => {
-                let (one, two, three) = triple_value_arg_parser(&s, 6);
-                Some(GemonArgument::ProjectSetup(GemonProjectScenario::AddEnv(
-                    one, two, three,
-                )))
-            }
-            GemonCommand::RemoveEnvValue(s, Form::Short) => {
-                let (one, two) = key_value_pair_arg_parser(&s, 5);
+            GemonCommand::RemoveEnvValue(s) => {
+                let (one, two) = key_value_pair_arg_parser(&s);
                 Some(GemonArgument::ProjectSetup(
                     GemonProjectScenario::RemoveEnvValue(one, two),
                 ))
             }
-            GemonCommand::RemoveEnvValue(s, Form::Long) => {
-                let (one, two) = key_value_pair_arg_parser(&s, 18);
-                Some(GemonArgument::ProjectSetup(
-                    GemonProjectScenario::RemoveEnvValue(one, two),
-                ))
-            }
-            GemonCommand::SelectEnv(s, Form::Short) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::SelectEnv(simple_arg_parser(&s, 4)),
-            )),
-            GemonCommand::SelectEnv(s, Form::Long) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::SelectEnv(simple_arg_parser(&s, 13)),
+            GemonCommand::SelectEnv(s) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::SelectEnv(simple_arg_parser(&s)),
             )),
             GemonCommand::Invalid => None,
-            GemonCommand::AddAuthorization(s, Form::Short) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::AddAuthorization(simple_arg_parser(&s, 6)),
-            )),
-            GemonCommand::AddAuthorization(s, Form::Long) => Some(GemonArgument::ProjectSetup(
-                GemonProjectScenario::AddAuthorization(simple_arg_parser(&s, 16)),
+            GemonCommand::AddAuthorization(s) => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::AddAuthorization(simple_arg_parser(&s)),
             )),
             GemonCommand::RemoveAuthorization => Some(GemonArgument::ProjectSetup(
                 GemonProjectScenario::RemoveAuthorization,
@@ -194,6 +148,84 @@ impl GemonArgumentParser for String {
 mod tests {
     use super::GemonArgumentParser;
     use crate::config::{arguments::GemonArgument, types::GemonProjectScenario};
+
+    fn parse(arg: &str) -> Option<GemonArgument> {
+        String::from(arg).parse_argument()
+    }
+
+    fn project_scenario(arg: &str) -> GemonProjectScenario {
+        match parse(arg) {
+            Some(GemonArgument::ProjectSetup(scenario)) => scenario,
+            other => panic!("expected project scenario for {arg}, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn short_and_long_request_name_flags_parse_the_same_name() {
+        for arg in ["-c=login", "--call=login"] {
+            assert!(matches!(project_scenario(arg), GemonProjectScenario::Call(name) if name == "login"));
+        }
+        for arg in ["-sc=login", "--save-and-call=login"] {
+            assert!(
+                matches!(project_scenario(arg), GemonProjectScenario::SaveAndCall(name) if name == "login")
+            );
+        }
+        for arg in ["-s=login", "--save=login"] {
+            assert!(matches!(project_scenario(arg), GemonProjectScenario::Save(name) if name == "login"));
+        }
+        for arg in ["-d=login", "--delete=login"] {
+            assert!(matches!(project_scenario(arg), GemonProjectScenario::Delete(name) if name == "login"));
+        }
+    }
+
+    #[test]
+    fn env_flags_parse_short_and_long_forms() {
+        for arg in ["-edv=int::key", "--env-delete-value=int::key", "-env-delete-value=int::key"] {
+            assert!(matches!(
+                project_scenario(arg),
+                GemonProjectScenario::RemoveEnvValue(env, key) if env == "int" && key == "key"
+            ));
+        }
+        for arg in ["-e=int::base_uri::http://a", "--env=int::base_uri::http://a"] {
+            assert!(matches!(
+                project_scenario(arg),
+                GemonProjectScenario::AddEnv(env, key, value)
+                    if env == "int" && key == "base_uri" && value == "http://a"
+            ));
+        }
+        for arg in ["-se=int", "--select-env=int"] {
+            assert!(matches!(project_scenario(arg), GemonProjectScenario::SelectEnv(env) if env == "int"));
+        }
+        for arg in ["-ed=int", "--env-delete=int"] {
+            assert!(matches!(project_scenario(arg), GemonProjectScenario::RemoveEnv(env) if env == "int"));
+        }
+        for arg in ["-auth=Bearer a=b", "--authorization=Bearer a=b"] {
+            assert!(matches!(
+                project_scenario(arg),
+                GemonProjectScenario::AddAuthorization(value) if value == "Bearer a=b"
+            ));
+        }
+    }
+
+    #[test]
+    fn values_keep_equals_signs_after_the_flag() {
+        assert!(matches!(
+            parse("--uri=http://api.test/items?a=1&b=2"),
+            Some(GemonArgument::Uri(uri)) if uri == "http://api.test/items?a=1&b=2"
+        ));
+        assert!(matches!(
+            parse("-h=X-Token::a=b"),
+            Some(GemonArgument::Header(key, value)) if key == "X-Token" && value == "a=b"
+        ));
+        assert!(matches!(
+            parse("--form-data=name::value"),
+            Some(GemonArgument::FormData(key, value)) if key == "name" && value == "value"
+        ));
+        assert!(matches!(
+            parse("-rf=out.json"),
+            Some(GemonArgument::ResponseFilePath(Some(path))) if path == "out.json"
+        ));
+    }
 
     #[test]
     fn parses_openapi_import_command() {

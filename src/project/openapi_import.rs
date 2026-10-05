@@ -150,8 +150,9 @@ pub(crate) fn import_openapi_requests_from(
 
     for spec_path in &spec_paths {
         for imported in requests_from_spec(spec_path, &mut used_names)? {
-            save_request_to_project(root, &imported.request, &imported.name)?;
-            imported_names.push(imported.name);
+            let name = name_outside_foreign_paths(root, imported.name, &mut used_names);
+            save_request_to_project(root, &imported.request, &name)?;
+            imported_names.push(name);
         }
     }
 
@@ -160,6 +161,23 @@ pub(crate) fn import_openapi_requests_from(
         requests_imported: imported_names.len(),
         request_names: imported_names,
     })
+}
+
+/// Whether `name` is taken by something that is not a saved request, e.g. the folder
+/// holding the spec. Requests are never written into such paths.
+fn is_foreign_path(root: &Path, name: &str) -> bool {
+    let path = root.join(name);
+    path.exists() && !path.join(".marker").exists()
+}
+
+fn name_outside_foreign_paths(root: &Path, name: String, used_names: &mut HashSet<String>) -> String {
+    if !is_foreign_path(root, &name) {
+        return name;
+    }
+    (2..)
+        .map(|index| format!("{name}_{index}"))
+        .find(|candidate| !is_foreign_path(root, candidate) && used_names.insert(candidate.clone()))
+        .expect("an unused name exists")
 }
 
 fn find_openapi_specs(root: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
@@ -617,6 +635,26 @@ paths:
             create_pet.body(),
             Some("{\n  \"age\": 0,\n  \"name\": \"{name}\"\n}")
         );
+
+        fs::remove_dir_all(root).expect("clean temp test dir");
+    }
+
+    #[test]
+    fn import_never_writes_into_folders_that_are_not_requests() {
+        let root = temp_dir("foreign");
+        write_project(&root);
+        fs::create_dir_all(root.join("api")).expect("create spec dir");
+        fs::write(
+            root.join("api/openapi.yaml"),
+            "openapi: 3.0.0\npaths:\n  /api:\n    get:\n      operationId: api\n",
+        )
+        .expect("write spec");
+
+        let report = import_openapi_requests_from(&root).expect("import requests");
+
+        assert_eq!(report.request_names, vec![String::from("api_2")]);
+        assert!(!root.join("api/.marker").exists());
+        assert!(root.join("api_2/.marker").exists());
 
         fs::remove_dir_all(root).expect("clean temp test dir");
     }

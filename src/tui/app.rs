@@ -1,88 +1,154 @@
 use super::{
+    actions::Action,
     input::TextInput,
-    layout::{self, contains},
+    viewer::{self, ContentKind, Match},
 };
 use crate::{
-    config::{effector::Effector, types::GemonMethodType, GemonConfig},
-    constants::NO_ENV,
+    config::types::GemonMethodType,
+    constants::{NO_ENV, PROJECT_ROOT_FILE},
     project::{
-        import_openapi_requests as import_openapi_project_requests,
-        project_handler::{
-            add_authorization, add_env_value, create_project, delete_request, get_project,
-            list_saved_requests, read_saved_rest_request, remove_authorization, remove_env,
-            remove_env_value, save_request, set_selected_env, SavedRequestInfo,
-        },
+        project_handler::{list_saved_requests, try_get_project, SavedRequestInfo},
         Project,
     },
     request::{
-        request_builder::{GemonRequest, GemonResponse, RequestBuilder},
-        rest_request::GemonRestRequest,
+        request_builder::GemonResponse,
+        rest_request::{GemonRestRequest, GemonRestRequestBuilder},
     },
 };
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use ratatui::layout::Rect;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde_json::Value;
-use std::{collections::HashMap, time::Instant};
+use std::{
+    cell::Cell,
+    collections::{BTreeSet, HashMap},
+    fs,
+    time::{Duration, Instant, SystemTime},
+};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+mod environments;
+mod mouse;
+mod overlay;
+mod requests;
+#[cfg(test)]
+mod tests;
+
+pub use environments::EnvRow;
+pub use mouse::BRAND;
+pub use overlay::{
+    Confirm, ConfirmKind, Overlay, Palette, PendingAction, Picker, PickerItem, PickerKind,
+    Prompt, PromptKind, TextView,
+};
+
+const DEFAULT_SIDEBAR_WIDTH: u16 = 30;
+const DEFAULT_RESPONSE_PERCENT: u16 = 55;
+
+/// Work the event loop performs on behalf of the app.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppCommand {
     None,
-    SendRequest,
+    Send(GemonRestRequest),
+    Cancel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Tab {
+pub enum Screen {
     Requests,
     Environments,
-    Help,
 }
 
-impl Tab {
-    pub fn title(&self) -> &'static str {
+impl Screen {
+    pub const ALL: [Screen; 2] = [Screen::Requests, Screen::Environments];
+
+    pub fn title(self) -> &'static str {
         match self {
-            Tab::Requests => "Requests",
-            Tab::Environments => "Environments",
-            Tab::Help => "Help",
+            Screen::Requests => "Requests",
+            Screen::Environments => "Environments",
         }
     }
 
-    fn next(self) -> Tab {
+    pub fn key(self) -> &'static str {
         match self {
-            Tab::Requests => Tab::Environments,
-            Tab::Environments => Tab::Help,
-            Tab::Help => Tab::Requests,
-        }
-    }
-
-    fn previous(self) -> Tab {
-        match self {
-            Tab::Requests => Tab::Help,
-            Tab::Environments => Tab::Requests,
-            Tab::Help => Tab::Environments,
+            Screen::Requests => "F1",
+            Screen::Environments => "F2",
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
-    SavedRequests,
-    RequestFilter,
+    Sidebar,
     Method,
     Url,
-    RequestName,
-    Secure,
     Headers,
-    FormData,
     Body,
+    Form,
+    Auth,
     Response,
     EnvList,
-    EnvValues,
+    EnvVars,
+}
+
+impl Focus {
+    fn screen(self) -> Screen {
+        match self {
+            Focus::EnvList | Focus::EnvVars => Screen::Environments,
+            _ => Screen::Requests,
+        }
+    }
+}
+
+const REQUEST_FOCUS_ORDER: [Focus; 8] = [
+    Focus::Sidebar,
+    Focus::Method,
+    Focus::Url,
+    Focus::Headers,
+    Focus::Body,
+    Focus::Form,
+    Focus::Auth,
+    Focus::Response,
+];
+const ENVIRONMENT_FOCUS_ORDER: [Focus; 2] = [Focus::EnvList, Focus::EnvVars];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestTab {
+    Headers,
+    Body,
+    Form,
+    Auth,
+}
+
+impl RequestTab {
+    pub const ALL: [RequestTab; 4] = [
+        RequestTab::Headers,
+        RequestTab::Body,
+        RequestTab::Form,
+        RequestTab::Auth,
+    ];
+
+    pub fn focus(self) -> Focus {
+        match self {
+            RequestTab::Headers => Focus::Headers,
+            RequestTab::Body => Focus::Body,
+            RequestTab::Form => Focus::Form,
+            RequestTab::Auth => Focus::Auth,
+        }
+    }
+
+    fn from_focus(focus: Focus) -> Option<RequestTab> {
+        RequestTab::ALL.into_iter().find(|tab| tab.focus() == focus)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResponseTab {
+    Body,
+    Headers,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StatusKind {
     Info,
     Success,
+    Warning,
     Error,
 }
 
@@ -90,15 +156,6 @@ pub enum StatusKind {
 pub struct StatusLine {
     pub message: String,
     pub kind: StatusKind,
-}
-
-impl StatusLine {
-    fn info(message: impl Into<String>) -> StatusLine {
-        StatusLine {
-            message: message.into(),
-            kind: StatusKind::Info,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -121,157 +178,206 @@ impl KeyValue {
     }
 }
 
+/// The request being edited. Pair selections live here so loading a request resets them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestDraft {
-    pub name: TextInput,
     pub method: GemonMethodType,
     pub url: TextInput,
     pub secure: bool,
     pub headers: Vec<KeyValue>,
     pub selected_header: usize,
-    pub form_data: Vec<KeyValue>,
-    pub selected_form_data: usize,
+    pub form: Vec<KeyValue>,
+    pub selected_form: usize,
     pub body: TextInput,
-}
-
-impl RequestDraft {
-    pub fn from_saved(name: &str, request: GemonRestRequest) -> RequestDraft {
-        RequestDraft {
-            name: TextInput::single(name),
-            method: request.method(),
-            url: TextInput::single(request.uri()),
-            secure: false,
-            headers: KeyValue::from_map(request.headers()),
-            selected_header: 0,
-            form_data: KeyValue::from_map(request.form_data()),
-            selected_form_data: 0,
-            body: TextInput::multiline(request.body().unwrap_or_default()),
-        }
-    }
-
-    pub fn save_name(&self) -> String {
-        self.name.value().trim().to_string()
-    }
-
-    fn validate_request(&self) -> Result<(), String> {
-        if self.url.value().trim().is_empty() {
-            return Err(String::from("URI is required before sending a request"));
-        }
-
-        if self
-            .headers
-            .iter()
-            .chain(self.form_data.iter())
-            .any(|pair| pair.key.trim().is_empty() && !pair.value.trim().is_empty())
-        {
-            return Err(String::from("Key/value rows with values also need keys"));
-        }
-
-        Ok(())
-    }
-
-    fn validate_save(&self) -> Result<(), String> {
-        self.validate_request()?;
-        if self.save_name().is_empty() {
-            return Err(String::from("Request name is required before saving"));
-        }
-        Ok(())
-    }
-
-    fn to_config(&self, apply_env: bool, secure: bool) -> GemonConfig {
-        GemonConfig::rest_request(
-            self.method,
-            self.text_value(self.url.value(), apply_env),
-            Self::pairs_to_map(&self.headers, apply_env),
-            self.body_value(apply_env),
-            Self::pairs_to_map(&self.form_data, apply_env),
-            secure,
-        )
-    }
-
-    fn body_value(&self, apply_env: bool) -> Option<String> {
-        let body = self.body.value();
-        if body.is_empty() {
-            None
-        } else {
-            Some(self.text_value(body, apply_env))
-        }
-    }
-
-    fn text_value(&self, value: String, apply_env: bool) -> String {
-        if apply_env {
-            Effector::apply_env_to_string(value)
-        } else {
-            value
-        }
-    }
-
-    fn pairs_to_map(pairs: &[KeyValue], apply_env: bool) -> HashMap<String, String> {
-        pairs
-            .iter()
-            .filter(|pair| !pair.key.trim().is_empty())
-            .map(|pair| {
-                let key = pair.key.trim().to_string();
-                let value = pair.value.clone();
-                if apply_env {
-                    (
-                        Effector::apply_env_to_string(key),
-                        Effector::apply_env_to_string(value),
-                    )
-                } else {
-                    (key, value)
-                }
-            })
-            .collect()
-    }
-
-    pub fn command_preview(&self) -> String {
-        let mut args = vec![
-            String::from("gemon"),
-            String::from("-t=REST"),
-            format!("-m={}", self.method),
-        ];
-
-        if !self.url.value().trim().is_empty() {
-            args.push(format!("-u={}", self.url.value()));
-        }
-
-        for header in &self.headers {
-            if !header.key.trim().is_empty() {
-                args.push(format!("-h={}::{}", header.key.trim(), header.value));
-            }
-        }
-
-        if self.secure {
-            args.push(String::from("-sec"));
-        }
-
-        args.join(" ")
-    }
 }
 
 impl Default for RequestDraft {
     fn default() -> Self {
         RequestDraft {
-            name: TextInput::single(""),
             method: GemonMethodType::Get,
             url: TextInput::single(""),
             secure: false,
             headers: Vec::new(),
             selected_header: 0,
-            form_data: Vec::new(),
-            selected_form_data: 0,
+            form: Vec::new(),
+            selected_form: 0,
             body: TextInput::multiline(""),
         }
     }
 }
 
+impl RequestDraft {
+    pub fn from_saved(request: &GemonRestRequest) -> RequestDraft {
+        RequestDraft {
+            method: request.method(),
+            url: TextInput::single(request.uri()),
+            secure: request.secure(),
+            headers: KeyValue::from_map(request.headers()),
+            selected_header: 0,
+            form: KeyValue::from_map(request.form_data()),
+            selected_form: 0,
+            body: TextInput::multiline(request.body().unwrap_or_default()),
+        }
+    }
+
+    /// Equality of everything that would be saved, ignoring cursor and selection state.
+    pub fn same_content(&self, other: &RequestDraft) -> bool {
+        self.method == other.method
+            && self.url.value() == other.url.value()
+            && self.secure == other.secure
+            && self.headers == other.headers
+            && self.form == other.form
+            && self.body_text() == other.body_text()
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.url.value().trim().is_empty() {
+            return Err(String::from("Enter a URL first"));
+        }
+        if self
+            .headers
+            .iter()
+            .chain(self.form.iter())
+            .any(|pair| pair.key.trim().is_empty())
+        {
+            return Err(String::from("Every header and form field needs a name"));
+        }
+        Ok(())
+    }
+
+    pub fn body_text(&self) -> Option<String> {
+        let body = self.body.value();
+        if body.trim().is_empty() {
+            None
+        } else {
+            Some(body)
+        }
+    }
+
+    pub fn pairs(&self, target: PairTarget) -> &[KeyValue] {
+        match target {
+            PairTarget::Header => &self.headers,
+            PairTarget::Form => &self.form,
+        }
+    }
+
+    pub fn selected_pair(&self, target: PairTarget) -> usize {
+        match target {
+            PairTarget::Header => self.selected_header,
+            PairTarget::Form => self.selected_form,
+        }
+    }
+
+    fn pairs_mut(&mut self, target: PairTarget) -> (&mut Vec<KeyValue>, &mut usize) {
+        match target {
+            PairTarget::Header => (&mut self.headers, &mut self.selected_header),
+            PairTarget::Form => (&mut self.form, &mut self.selected_form),
+        }
+    }
+
+    /// The request exactly as saved: placeholders stay unresolved.
+    pub fn to_saved_request(&self) -> GemonRestRequest {
+        self.build(&HashMap::new())
+    }
+
+    /// The request as sent: environment placeholders are resolved.
+    pub fn to_request(&self, env: &HashMap<String, String>) -> GemonRestRequest {
+        self.build(env)
+    }
+
+    fn build(&self, env: &HashMap<String, String>) -> GemonRestRequest {
+        let pairs = |pairs: &[KeyValue]| {
+            pairs
+                .iter()
+                .map(|pair| {
+                    (
+                        substitute(pair.key.trim(), env),
+                        substitute(&pair.value, env),
+                    )
+                })
+                .collect::<HashMap<_, _>>()
+        };
+        GemonRestRequestBuilder::new()
+            .set_gemon_method_type(self.method)
+            .set_url(substitute(self.url.value().trim(), env))
+            .set_headers(&pairs(&self.headers))
+            .set_body(self.body_text().map(|body| substitute(&body, env)))
+            .set_form_data(&pairs(&self.form))
+            .set_secure(self.secure)
+            .build()
+    }
+
+    /// Placeholders such as `{base_uri}` that `env` does not define.
+    pub fn unresolved_placeholders(&self, env: &HashMap<String, String>) -> Vec<String> {
+        let mut texts = vec![self.url.value()];
+        texts.extend(self.body_text());
+        for pair in self.headers.iter().chain(self.form.iter()) {
+            texts.push(pair.key.clone());
+            texts.push(pair.value.clone());
+        }
+        texts
+            .iter()
+            .flat_map(|text| placeholders(text))
+            .filter(|name| !env.contains_key(name))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairTarget {
+    Header,
+    Form,
+}
+
+impl PairTarget {
+    pub fn noun(self) -> &'static str {
+        match self {
+            PairTarget::Header => "header",
+            PairTarget::Form => "form field",
+        }
+    }
+}
+
+/// Replaces `{name}` with the environment value, as the CLI does.
+pub fn substitute(text: &str, env: &HashMap<String, String>) -> String {
+    env.iter().fold(text.to_string(), |text, (key, value)| {
+        text.replace(&format!("{{{key}}}"), value)
+    })
+}
+
+fn placeholders(text: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('{') {
+        let after = &rest[start + 1..];
+        match after.find('}') {
+            Some(end) => {
+                let name = &after[..end];
+                let is_name = !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+                    && name.chars().any(|c| c.is_ascii_alphabetic());
+                if is_name {
+                    names.push(name.to_string());
+                    rest = &after[end + 1..];
+                } else {
+                    rest = after;
+                }
+            }
+            None => break,
+        }
+    }
+    names
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EnvironmentView {
     pub name: String,
-    pub selected: bool,
     pub values: Vec<KeyValue>,
-    pub authorization_set: bool,
+    pub authorization: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -279,21 +385,21 @@ pub struct ProjectView {
     pub exists: bool,
     pub name: Option<String>,
     pub selected_environment: Option<String>,
-    pub default_authorization_set: bool,
+    pub default_authorization: Option<String>,
     pub last_response_path: Option<String>,
     pub environments: Vec<EnvironmentView>,
 }
 
 impl ProjectView {
     fn from_project(project: Project) -> ProjectView {
+        let authorization = project.authorization_entries();
         let mut environments = project
             .environments()
             .iter()
             .map(|(name, environment)| EnvironmentView {
                 name: name.clone(),
-                selected: project.selected_environment_name() == Some(name.as_str()),
                 values: KeyValue::from_map(environment.values_ref()),
-                authorization_set: project.authorization_entries().contains_key(name),
+                authorization: authorization.get(name).cloned(),
             })
             .collect::<Vec<_>>();
         environments.sort_by(|left, right| left.name.cmp(&right.name));
@@ -302,1921 +408,763 @@ impl ProjectView {
             exists: true,
             name: Some(project.name().to_string()),
             selected_environment: project.selected_environment_name().map(String::from),
-            default_authorization_set: project.authorization_entries().contains_key(NO_ENV),
+            default_authorization: authorization.get(NO_ENV).cloned(),
             last_response_path: project.last_called_request_path().map(String::from),
             environments,
         }
     }
+
+    pub fn environment(&self, name: &str) -> Option<&EnvironmentView> {
+        self.environments.iter().find(|env| env.name == name)
+    }
+
+    pub fn active_environment(&self) -> Option<&EnvironmentView> {
+        self.selected_environment
+            .as_deref()
+            .and_then(|name| self.environment(name))
+    }
+
+    pub fn active_values(&self) -> HashMap<String, String> {
+        self.active_environment()
+            .map(|env| {
+                env.values
+                    .iter()
+                    .map(|pair| (pair.key.clone(), pair.value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Authorization sent with secure requests: the active environment's, or the default.
+    pub fn active_authorization(&self) -> Option<&str> {
+        match self.selected_environment.as_deref() {
+            Some(_) => self
+                .active_environment()
+                .and_then(|env| env.authorization.as_deref()),
+            None => self.default_authorization.as_deref(),
+        }
+    }
+
+    pub fn active_environment_label(&self) -> &str {
+        self.selected_environment
+            .as_deref()
+            .unwrap_or("no environment")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResponseState {
+    Empty,
+    Loading { started: Instant, summary: String },
+    Ready(ResponseView),
+    Failed { summary: String, message: String },
+    Cancelled { summary: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResponseView {
-    pub status: u16,
-    pub elapsed_ms: u128,
+    pub status: Option<u16>,
+    pub elapsed: Option<Duration>,
     pub size_bytes: usize,
     pub headers: Vec<KeyValue>,
     pub body: String,
+    pub body_lines: Vec<String>,
+    pub header_lines: Vec<String>,
+    pub kind: ContentKind,
+    pub origin: String,
 }
 
 impl ResponseView {
-    fn from_response(response: GemonResponse, elapsed_ms: u128) -> ResponseView {
-        let size_bytes = response.data().len();
+    fn live(response: GemonResponse, elapsed: Duration, origin: String) -> ResponseView {
+        let headers = KeyValue::from_map(response.headers());
+        let (body, kind) = format_body(response.data().as_ref());
+        ResponseView::new(
+            Some(response.status()),
+            Some(elapsed),
+            response.data().len(),
+            headers,
+            body,
+            kind,
+            origin,
+        )
+    }
+
+    fn from_file(path: &str, contents: &[u8]) -> ResponseView {
+        let (body, kind) = format_body(contents);
+        ResponseView::new(
+            None,
+            None,
+            contents.len(),
+            Vec::new(),
+            body,
+            kind,
+            format!("file {path}"),
+        )
+    }
+
+    fn new(
+        status: Option<u16>,
+        elapsed: Option<Duration>,
+        size_bytes: usize,
+        headers: Vec<KeyValue>,
+        body: String,
+        kind: ContentKind,
+        origin: String,
+    ) -> ResponseView {
+        let header_lines = headers
+            .iter()
+            .map(|pair| format!("{}: {}", pair.key, pair.value))
+            .flat_map(|line| viewer::sanitize(&line))
+            .collect();
         ResponseView {
-            status: response.status(),
-            elapsed_ms,
+            status,
+            elapsed,
             size_bytes,
-            headers: KeyValue::from_map(response.headers()),
-            body: format_response_body(response.data().as_ref()),
+            body_lines: viewer::sanitize(&body),
+            header_lines,
+            headers,
+            body,
+            kind,
+            origin,
+        }
+    }
+
+    pub fn lines(&self, tab: ResponseTab) -> &[String] {
+        match tab {
+            ResponseTab::Body => &self.body_lines,
+            ResponseTab::Headers => &self.header_lines,
+        }
+    }
+
+    pub fn content_kind(&self, tab: ResponseTab) -> ContentKind {
+        match tab {
+            ResponseTab::Body => self.kind,
+            ResponseTab::Headers => ContentKind::Headers,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PairField {
-    Key,
-    Value,
-}
-
-impl PairField {
-    fn next(self) -> PairField {
-        match self {
-            PairField::Key => PairField::Value,
-            PairField::Value => PairField::Key,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EnvField {
-    Environment,
-    Key,
-    Value,
-}
-
-impl EnvField {
-    fn next(self) -> EnvField {
-        match self {
-            EnvField::Environment => EnvField::Key,
-            EnvField::Key => EnvField::Value,
-            EnvField::Value => EnvField::Environment,
-        }
+fn format_body(bytes: &[u8]) -> (String, ContentKind) {
+    match serde_json::from_slice::<Value>(bytes) {
+        Ok(value) => (
+            serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string()),
+            ContentKind::Json,
+        ),
+        Err(_) => (
+            String::from_utf8_lossy(bytes).to_string(),
+            ContentKind::Plain,
+        ),
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Modal {
-    ProjectName {
-        name: TextInput,
-    },
-    SaveRequest {
-        name: TextInput,
-    },
-    Header {
-        index: Option<usize>,
-        key: TextInput,
-        value: TextInput,
-        active: PairField,
-    },
-    FormData {
-        index: Option<usize>,
-        key: TextInput,
-        value: TextInput,
-        active: PairField,
-    },
-    EnvValue {
-        index: Option<usize>,
-        old_key: Option<String>,
-        env: TextInput,
-        key: TextInput,
-        value: TextInput,
-        active: EnvField,
-    },
-    Authorization {
-        value: TextInput,
-    },
-    ConfirmDeleteRequest {
-        name: String,
-    },
-    ConfirmDeleteEnv {
-        name: String,
-    },
-    ConfirmDeleteEnvValue {
-        env: String,
-        key: String,
-    },
+pub struct ResponseSearch {
+    pub input: TextInput,
+    pub editing: bool,
+    pub matches: Vec<Match>,
+    pub current: usize,
 }
 
-impl Modal {
-    pub fn title(&self) -> &'static str {
-        match self {
-            Modal::ProjectName { .. } => "Create Gemon Project",
-            Modal::SaveRequest { .. } => "Save Request",
-            Modal::Header { index, .. } if index.is_some() => "Edit Header",
-            Modal::Header { .. } => "Add Header",
-            Modal::FormData { index, .. } if index.is_some() => "Edit Form Data",
-            Modal::FormData { .. } => "Add Form Data",
-            Modal::EnvValue { index, .. } if index.is_some() => "Edit Environment Value",
-            Modal::EnvValue { .. } => "Add Environment Value",
-            Modal::Authorization { .. } => "Authorization",
-            Modal::ConfirmDeleteRequest { .. } => "Delete Request",
-            Modal::ConfirmDeleteEnv { .. } => "Delete Environment",
-            Modal::ConfirmDeleteEnvValue { .. } => "Delete Environment Value",
-        }
+impl ResponseSearch {
+    pub fn current_match(&self) -> Option<Match> {
+        self.matches.get(self.current).copied()
     }
+}
+
+/// Size of the response viewer at the last render, used to clamp scrolling.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Viewport {
+    pub total_rows: usize,
+    pub height: usize,
+    pub width: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DragTarget {
+    Sidebar,
+    ResponseSplit,
+    EnvironmentList,
 }
 
 #[derive(Debug)]
 pub struct App {
     pub should_quit: bool,
-    pub active_tab: Tab,
+    pub screen: Screen,
     pub focus: Focus,
+    pub request_tab: RequestTab,
     pub project: ProjectView,
+    pub project_error: Option<String>,
     pub saved_requests: Vec<SavedRequestInfo>,
     pub selected_request: usize,
-    pub request_filter: TextInput,
+    pub sidebar_filter: TextInput,
+    pub sidebar_searching: bool,
+    pub sidebar_visible: bool,
+    /// Width chosen by the user; `None` fits the longest request name.
+    pub sidebar_width: Option<u16>,
+    pub sidebar_offset: Cell<usize>,
     pub draft: RequestDraft,
-    pub response: Option<ResponseView>,
-    pub response_scroll: u16,
+    pub clean_draft: RequestDraft,
+    pub loaded_name: Option<String>,
+    pub response: ResponseState,
+    pub response_tab: ResponseTab,
+    pub response_scroll: usize,
+    pub response_zoomed: bool,
+    pub response_percent: u16,
+    pub response_viewport: Cell<Viewport>,
+    pub response_search: Option<ResponseSearch>,
     pub selected_env: usize,
-    pub selected_env_value: usize,
-    pub modal: Option<Modal>,
+    pub selected_env_var: usize,
+    pub env_list_width: u16,
+    pub overlay: Option<Overlay>,
+    pub overlay_scroll_limit: Cell<usize>,
     pub status: StatusLine,
-    pub request_list_width: u16,
-    pub environment_list_width: u16,
-    pub pair_split_percent: u16,
-    pub body_split_percent: u16,
-    drag_target: Option<DragTarget>,
+    pub spinner: usize,
+    focus_at_send: Option<Focus>,
+    drag: Option<DragTarget>,
+    disk_stamp: Option<DiskStamp>,
+    disk_checked: Option<Instant>,
 }
 
+/// Modification times of the project file and folder, to notice edits made elsewhere
+/// (for example with the CLI in another terminal).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DragTarget {
-    RequestListWidth,
-    EnvironmentListWidth,
-    PairSplit,
-    BodySplit,
+struct DiskStamp {
+    project_file: Option<SystemTime>,
+    folder: Option<SystemTime>,
+}
+
+impl DiskStamp {
+    fn read() -> DiskStamp {
+        let modified = |path: &str| fs::metadata(path).and_then(|meta| meta.modified()).ok();
+        DiskStamp {
+            project_file: modified(PROJECT_ROOT_FILE),
+            folder: modified("."),
+        }
+    }
 }
 
 impl App {
+    /// Opens the project in the current directory, offering to create one if missing.
     pub fn new() -> App {
-        let mut app = App {
-            should_quit: false,
-            active_tab: Tab::Requests,
-            focus: Focus::SavedRequests,
-            project: ProjectView::default(),
-            saved_requests: Vec::new(),
-            selected_request: 0,
-            request_filter: TextInput::single(""),
-            draft: RequestDraft::default(),
-            response: None,
-            response_scroll: 0,
-            selected_env: 0,
-            selected_env_value: 0,
-            modal: None,
-            status: StatusLine::info("Ready"),
-            request_list_width: 32,
-            environment_list_width: 34,
-            pair_split_percent: 50,
-            body_split_percent: 42,
-            drag_target: None,
-        };
-
+        let mut app = App::detached();
         app.refresh_workspace();
-        if !app.project.exists {
-            app.modal = Some(Modal::ProjectName {
-                name: TextInput::single(""),
-            });
-            app.set_info(
-                "No gemon.json found. Create a project to save requests and environments.",
-            );
+        if app.project_error.is_none() && !app.project.exists {
+            app.open_create_project_prompt();
+            app.set_info("No gemon.json here yet. Create a project, or press Esc to send ad-hoc requests.");
         }
-
         app
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) -> AppCommand {
-        if Self::is_quit_key(key) {
-            self.should_quit = true;
-            return AppCommand::None;
-        }
-
-        if self.handle_numbered_focus_shortcut(key) {
-            return AppCommand::None;
-        }
-
-        if self.modal.is_some() {
-            return self.handle_modal_key(key);
-        }
-
-        if key.modifiers.contains(KeyModifiers::CONTROL) {
-            return self.handle_control_key(key);
-        }
-
-        match key.code {
-            KeyCode::F(1) => {
-                self.focus_request(Focus::SavedRequests);
-                return AppCommand::None;
-            }
-            KeyCode::F(2) => {
-                self.focus_environment(Focus::EnvList);
-                return AppCommand::None;
-            }
-            KeyCode::F(3) => {
-                self.active_tab = Tab::Help;
-                return AppCommand::None;
-            }
-            KeyCode::Tab => {
-                self.next_focus();
-                return AppCommand::None;
-            }
-            KeyCode::BackTab => {
-                self.previous_focus();
-                return AppCommand::None;
-            }
-            KeyCode::Esc => {
-                if self.focus == Focus::RequestFilter {
-                    if self.request_filter.value().is_empty() {
-                        self.focus = Focus::SavedRequests;
-                    } else {
-                        self.request_filter.set_value(String::new());
-                        self.clamp_request_selection();
-                    }
-                    return AppCommand::None;
-                }
-                self.active_tab = self.active_tab.previous();
-                self.align_focus_to_tab();
-                return AppCommand::None;
-            }
-            _ => {}
-        }
-
-        if let Some(input) = self.active_input_mut() {
-            if input.handle_key(key) {
-                if self.focus == Focus::RequestFilter {
-                    self.clamp_request_selection();
-                }
-                return AppCommand::None;
-            }
-        }
-
-        match self.active_tab {
-            Tab::Requests => self.handle_request_key(key),
-            Tab::Environments => self.handle_environment_key(key),
-            Tab::Help => {
-                match key.code {
-                    KeyCode::Left => self.active_tab = self.active_tab.previous(),
-                    KeyCode::Right | KeyCode::Enter => self.active_tab = self.active_tab.next(),
-                    _ => {}
-                }
-                AppCommand::None
-            }
+    /// An app that has not read anything from disk.
+    pub fn detached() -> App {
+        App {
+            should_quit: false,
+            screen: Screen::Requests,
+            focus: Focus::Url,
+            request_tab: RequestTab::Headers,
+            project: ProjectView::default(),
+            project_error: None,
+            saved_requests: Vec::new(),
+            selected_request: 0,
+            sidebar_filter: TextInput::single(""),
+            sidebar_searching: false,
+            sidebar_visible: true,
+            sidebar_width: None,
+            sidebar_offset: Cell::new(0),
+            draft: RequestDraft::default(),
+            clean_draft: RequestDraft::default(),
+            loaded_name: None,
+            response: ResponseState::Empty,
+            response_tab: ResponseTab::Body,
+            response_scroll: 0,
+            response_zoomed: false,
+            response_percent: DEFAULT_RESPONSE_PERCENT,
+            response_viewport: Cell::new(Viewport::default()),
+            response_search: None,
+            selected_env: 0,
+            selected_env_var: 0,
+            env_list_width: DEFAULT_SIDEBAR_WIDTH,
+            overlay: None,
+            overlay_scroll_limit: Cell::new(usize::MAX),
+            status: StatusLine {
+                message: String::from("Ready"),
+                kind: StatusKind::Info,
+            },
+            spinner: 0,
+            focus_at_send: None,
+            drag: None,
+            disk_stamp: None,
+            disk_checked: None,
         }
     }
 
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> AppCommand {
-        if self.modal.is_some() {
-            return AppCommand::None;
-        }
-
-        let root = layout::root(area);
-        match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left) => {
-                if !self.start_drag(mouse.column, mouse.row, root) {
-                    self.handle_mouse_click(mouse.column, mouse.row, root);
-                }
-            }
-            MouseEventKind::Drag(MouseButton::Left) => {
-                self.update_drag(mouse.column, mouse.row, root);
-            }
-            MouseEventKind::Up(MouseButton::Left) => {
-                self.drag_target = None;
-            }
-            MouseEventKind::ScrollUp => self.handle_mouse_scroll(mouse.column, mouse.row, -1, root),
-            MouseEventKind::ScrollDown => {
-                self.handle_mouse_scroll(mouse.column, mouse.row, 1, root)
-            }
-            _ => {}
-        }
-
-        AppCommand::None
-    }
-
-    fn start_drag(&mut self, column: u16, row: u16, root: layout::RootLayout) -> bool {
-        match self.active_tab {
-            Tab::Requests => {
-                let requests = layout::requests(
-                    root.body,
-                    self.request_list_width,
-                    self.pair_split_percent,
-                    self.body_split_percent,
-                );
-                if on_vertical_boundary(requests.saved, requests.workspace, column, row) {
-                    self.drag_target = Some(DragTarget::RequestListWidth);
-                    return true;
-                }
-                if on_vertical_boundary(requests.headers, requests.form_data, column, row) {
-                    self.drag_target = Some(DragTarget::PairSplit);
-                    return true;
-                }
-                if on_horizontal_boundary(requests.body, requests.response, column, row) {
-                    self.drag_target = Some(DragTarget::BodySplit);
-                    return true;
-                }
-            }
-            Tab::Environments => {
-                let env = layout::environments(root.body, self.environment_list_width);
-                if on_vertical_boundary(env.list, env.values, column, row) {
-                    self.drag_target = Some(DragTarget::EnvironmentListWidth);
-                    return true;
-                }
-            }
-            Tab::Help => {}
-        }
-
-        false
-    }
-
-    fn update_drag(&mut self, column: u16, row: u16, root: layout::RootLayout) {
-        match self.drag_target {
-            Some(DragTarget::RequestListWidth) => {
-                let width = column.saturating_sub(root.body.x).saturating_add(1);
-                self.request_list_width = layout::clamp_panel_width(width, root.body.width);
-            }
-            Some(DragTarget::EnvironmentListWidth) => {
-                let width = column.saturating_sub(root.body.x).saturating_add(1);
-                self.environment_list_width = layout::clamp_panel_width(width, root.body.width);
-            }
-            Some(DragTarget::PairSplit) => {
-                let requests = layout::requests(
-                    root.body,
-                    self.request_list_width,
-                    self.pair_split_percent,
-                    self.body_split_percent,
-                );
-                self.pair_split_percent =
-                    percent_at(column, requests.pairs.x, requests.pairs.width).clamp(20, 80);
-            }
-            Some(DragTarget::BodySplit) => {
-                let requests = layout::requests(
-                    root.body,
-                    self.request_list_width,
-                    self.pair_split_percent,
-                    self.body_split_percent,
-                );
-                let top = requests.body.y;
-                let height = requests
-                    .body
-                    .height
-                    .saturating_add(requests.response.height)
-                    .max(1);
-                self.body_split_percent = percent_at(row, top, height).clamp(20, 75);
-            }
-            None => {}
-        }
-    }
-
-    fn handle_mouse_click(&mut self, column: u16, row: u16, root: layout::RootLayout) {
-        if contains(root.tabs, column, row) {
-            self.click_header_tab(column, root.tabs);
+    /// Reloads the project when it changed on disk since the last check, at most once a second.
+    pub fn sync_with_disk(&mut self) {
+        // Dialogs hold names and positions from when they opened; reload once they close.
+        if self.overlay.is_some() {
             return;
         }
-
-        match self.active_tab {
-            Tab::Requests => self.handle_request_click(column, row, root.body),
-            Tab::Environments => self.handle_environment_click(column, row, root.body),
-            Tab::Help => {}
-        }
-    }
-
-    fn click_header_tab(&mut self, column: u16, tabs: Rect) {
-        let relative = column.saturating_sub(tabs.x);
-        let tab_width = (tabs.width / 3).max(1);
-        self.active_tab = match (relative / tab_width).min(2) {
-            0 => Tab::Requests,
-            1 => Tab::Environments,
-            _ => Tab::Help,
-        };
-        self.align_focus_to_tab();
-    }
-
-    fn handle_request_click(&mut self, column: u16, row: u16, area: Rect) {
-        let requests = layout::requests(
-            area,
-            self.request_list_width,
-            self.pair_split_percent,
-            self.body_split_percent,
-        );
-
-        if contains(requests.saved_filter, column, row) {
-            self.focus_request(Focus::RequestFilter);
-        } else if contains(requests.saved_list, column, row) {
-            self.focus_request(Focus::SavedRequests);
-            if let Some(index) = list_row_at(requests.saved_list, row) {
-                self.select_visible_request(index);
-            }
-        } else if contains(requests.composer, column, row) {
-            self.focus_request(composer_focus_at(requests.composer, column, row));
-        } else if contains(requests.headers, column, row) {
-            self.focus_request(Focus::Headers);
-            if let Some(index) = table_row_at(requests.headers, row) {
-                self.select_pair_at(true, index);
-            }
-        } else if contains(requests.form_data, column, row) {
-            self.focus_request(Focus::FormData);
-            if let Some(index) = table_row_at(requests.form_data, row) {
-                self.select_pair_at(false, index);
-            }
-        } else if contains(requests.body, column, row) {
-            self.focus_request(Focus::Body);
-        } else if contains(requests.response, column, row) {
-            self.focus_request(Focus::Response);
-        }
-    }
-
-    fn handle_environment_click(&mut self, column: u16, row: u16, area: Rect) {
-        let env = layout::environments(area, self.environment_list_width);
-        if contains(env.list, column, row) {
-            self.focus_environment(Focus::EnvList);
-            if let Some(index) = list_row_at(env.list, row) {
-                self.select_env_at(index);
-            }
-        } else if contains(env.values, column, row) {
-            self.focus_environment(Focus::EnvValues);
-            if let Some(index) = table_row_at(env.values, row) {
-                self.select_env_value_at(index);
-            }
-        }
-    }
-
-    fn handle_mouse_scroll(
-        &mut self,
-        column: u16,
-        row: u16,
-        delta: isize,
-        root: layout::RootLayout,
-    ) {
-        match self.active_tab {
-            Tab::Requests => {
-                let requests = layout::requests(
-                    root.body,
-                    self.request_list_width,
-                    self.pair_split_percent,
-                    self.body_split_percent,
-                );
-                if contains(requests.saved, column, row) {
-                    self.focus_request(Focus::SavedRequests);
-                    self.move_selected_request(delta);
-                } else if contains(requests.headers, column, row) {
-                    self.focus_request(Focus::Headers);
-                    self.move_selected_pair(true, delta);
-                } else if contains(requests.form_data, column, row) {
-                    self.focus_request(Focus::FormData);
-                    self.move_selected_pair(false, delta);
-                } else if contains(requests.response, column, row) {
-                    self.focus_request(Focus::Response);
-                    self.scroll_response(delta);
-                }
-            }
-            Tab::Environments => {
-                let env = layout::environments(root.body, self.environment_list_width);
-                if contains(env.list, column, row) {
-                    self.focus_environment(Focus::EnvList);
-                    self.move_selected_env(delta);
-                } else if contains(env.values, column, row) {
-                    self.focus_environment(Focus::EnvValues);
-                    self.move_selected_env_value(delta);
-                }
-            }
-            Tab::Help => {}
-        }
-    }
-
-    fn is_quit_key(key: KeyEvent) -> bool {
-        key.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(key.code, KeyCode::Char(character) if matches!(character.to_ascii_lowercase(), 'c' | 'q'))
-    }
-
-    fn handle_numbered_focus_shortcut(&mut self, key: KeyEvent) -> bool {
-        if !key.modifiers.contains(KeyModifiers::CONTROL) {
-            return false;
-        }
-
-        match key.code {
-            KeyCode::Char('1') => self.focus_request(Focus::SavedRequests),
-            KeyCode::Char('2') | KeyCode::Char(' ') | KeyCode::Null => {
-                self.focus_request(Focus::Url)
-            }
-            KeyCode::Char('5') => self.focus_request(Focus::Headers),
-            KeyCode::Char('6') => self.focus_request(Focus::FormData),
-            KeyCode::Char('7') => self.focus_request(Focus::Body),
-            KeyCode::Char('8') => self.focus_request(Focus::Response),
-            KeyCode::Char('9') => self.focus_environment(Focus::EnvList),
-            KeyCode::Char('0') => self.focus_environment(Focus::EnvValues),
-            _ => return false,
-        }
-
-        self.modal = None;
-        true
-    }
-
-    fn focus_request(&mut self, focus: Focus) {
-        self.active_tab = Tab::Requests;
-        self.focus = focus;
-    }
-
-    fn focus_environment(&mut self, focus: Focus) {
-        self.active_tab = Tab::Environments;
-        self.focus = focus;
-    }
-
-    pub async fn send_request(&mut self) {
-        if let Err(message) = self.draft.validate_request() {
-            self.set_error(message);
+        if self
+            .disk_checked
+            .is_some_and(|checked| checked.elapsed() < Duration::from_secs(1))
+        {
             return;
         }
-
-        self.set_info("Sending request...");
-        let config = self.draft.to_config(true, self.draft.secure);
-        let request = RequestBuilder::build(&config);
-        let started = Instant::now();
-
-        match request.execute().await {
-            Ok(response) => {
-                self.response = Some(ResponseView::from_response(
-                    response,
-                    started.elapsed().as_millis(),
-                ));
-                self.response_scroll = 0;
-                self.focus = Focus::Response;
-                self.set_success("Response received");
-            }
-            Err(err) => {
-                self.set_error(format!("Request failed: {err}"));
-            }
+        self.disk_checked = Some(Instant::now());
+        if self.disk_stamp.is_some_and(|stamp| stamp != DiskStamp::read()) {
+            self.refresh_workspace();
         }
     }
 
     pub fn refresh_workspace(&mut self) {
-        self.project = get_project()
-            .map(ProjectView::from_project)
-            .unwrap_or_default();
+        // Remember highlighted items by name: reloading can insert or remove items before them.
+        let highlighted_request = self
+            .saved_requests
+            .get(self.selected_request)
+            .map(|request| request.name.clone());
+        let highlighted_env = self.selected_env_row().name().to_string();
+
+        self.disk_stamp = Some(DiskStamp::read());
+        match try_get_project() {
+            Ok(project) => {
+                self.project_error = None;
+                self.project = project.map(ProjectView::from_project).unwrap_or_default();
+            }
+            Err(err) => {
+                self.project = ProjectView::default();
+                self.set_error(format!("{err}. Fix the file and reload (Ctrl+P → Reload)."));
+                self.project_error = Some(err);
+            }
+        }
         self.saved_requests = if self.project.exists {
-            list_saved_requests().unwrap_or_default()
+            list_saved_requests().unwrap_or_else(|err| {
+                self.set_error(format!("Could not list saved requests: {err}"));
+                Vec::new()
+            })
         } else {
             Vec::new()
         };
 
+        if let Some(index) = highlighted_request
+            .and_then(|name| self.saved_requests.iter().position(|request| request.name == name))
+        {
+            self.selected_request = index;
+        }
+        if let Some(row) = self
+            .env_rows()
+            .iter()
+            .position(|row| row.name() == highlighted_env)
+        {
+            if row != self.selected_env {
+                self.selected_env = row;
+                self.selected_env_var = 0;
+            }
+        }
         self.clamp_request_selection();
         self.clamp_environment_selection();
     }
 
-    fn handle_control_key(&mut self, key: KeyEvent) -> AppCommand {
-        match key.code {
-            KeyCode::Char('r') if self.active_tab == Tab::Requests => {
-                return AppCommand::SendRequest;
-            }
-            KeyCode::Char('s') if self.active_tab == Tab::Requests => self.save_draft(),
-            KeyCode::Char('n') if self.active_tab == Tab::Requests => self.new_draft(),
-            KeyCode::Char('d') if self.active_tab == Tab::Requests => {
-                self.confirm_delete_selected_request()
-            }
-            KeyCode::Char('f') if self.active_tab == Tab::Requests => {
-                self.focus_request(Focus::RequestFilter)
-            }
-            KeyCode::Char('o') if self.active_tab == Tab::Requests => self.import_openapi(),
-            KeyCode::Char('l') => {
-                self.refresh_workspace();
-                self.set_success("Workspace reloaded");
-            }
-            _ => {}
-        }
-        AppCommand::None
+    pub fn effective_sidebar_width(&self) -> u16 {
+        self.sidebar_width.unwrap_or_else(|| {
+            let longest = self
+                .saved_requests
+                .iter()
+                .map(|request| unicode_width::UnicodeWidthStr::width(request.name.as_str()))
+                .max()
+                .unwrap_or_default();
+            // Marker, method column, borders and scrollbar take 11 columns.
+            (longest as u16 + 11).max(DEFAULT_SIDEBAR_WIDTH)
+        })
     }
 
-    fn handle_request_key(&mut self, key: KeyEvent) -> AppCommand {
+    pub fn is_dirty(&self) -> bool {
+        !self.draft.same_content(&self.clean_draft)
+    }
+
+    pub fn is_busy(&self) -> bool {
+        matches!(self.response, ResponseState::Loading { .. })
+    }
+
+    /// Whether keystrokes currently go into a text field, so plain letters are not commands.
+    pub fn is_typing(&self) -> bool {
+        if let Some(overlay) = &self.overlay {
+            return matches!(overlay, Overlay::Prompt(_) | Overlay::Palette(_));
+        }
         match self.focus {
-            Focus::SavedRequests => match key.code {
-                KeyCode::Up => self.move_selected_request(-1),
-                KeyCode::Down => self.move_selected_request(1),
-                KeyCode::Enter => self.load_selected_request(),
-                KeyCode::Char('/') => self.focus = Focus::RequestFilter,
-                KeyCode::Char('n') => self.new_draft(),
-                KeyCode::Char('x') => self.confirm_delete_selected_request(),
-                _ => {}
-            },
-            Focus::RequestFilter => match key.code {
-                KeyCode::Down => self.focus = Focus::SavedRequests,
-                KeyCode::Enter => self.load_selected_request(),
-                _ => {}
-            },
-            Focus::Method => match key.code {
-                KeyCode::Left | KeyCode::Up => self.draft.method = self.draft.method.previous(),
-                KeyCode::Right | KeyCode::Down | KeyCode::Enter | KeyCode::Char(' ') => {
-                    self.draft.method = self.draft.method.next()
-                }
-                _ => {}
-            },
-            Focus::Secure => match key.code {
-                KeyCode::Enter | KeyCode::Char(' ') => self.draft.secure = !self.draft.secure,
-                _ => {}
-            },
-            Focus::Headers => self.handle_pair_list_key(key, true),
-            Focus::FormData => self.handle_pair_list_key(key, false),
-            Focus::Response => self.handle_response_key(key),
-            Focus::Url | Focus::RequestName | Focus::Body => {}
-            Focus::EnvList | Focus::EnvValues => {}
-        }
-        AppCommand::None
-    }
-
-    fn handle_environment_key(&mut self, key: KeyEvent) -> AppCommand {
-        match self.focus {
-            Focus::EnvList => match key.code {
-                KeyCode::Up => self.move_selected_env(-1),
-                KeyCode::Down => self.move_selected_env(1),
-                KeyCode::Enter => self.select_current_env(),
-                KeyCode::Char('a') => self.open_env_value_modal(None),
-                KeyCode::Char('u') => self.open_authorization_modal(),
-                KeyCode::Char('x') => self.confirm_delete_current_env(),
-                _ => {}
-            },
-            Focus::EnvValues => match key.code {
-                KeyCode::Up => self.move_selected_env_value(-1),
-                KeyCode::Down => self.move_selected_env_value(1),
-                KeyCode::Char('a') => self.open_env_value_modal(None),
-                KeyCode::Enter | KeyCode::Char('e') => {
-                    self.open_env_value_modal(Some(self.selected_env_value))
-                }
-                KeyCode::Char('u') => self.open_authorization_modal(),
-                KeyCode::Char('x') => self.confirm_delete_current_env_value(),
-                _ => {}
-            },
-            _ => {}
-        }
-        AppCommand::None
-    }
-
-    fn handle_pair_list_key(&mut self, key: KeyEvent, is_header: bool) {
-        match key.code {
-            KeyCode::Up => self.move_selected_pair(is_header, -1),
-            KeyCode::Down => self.move_selected_pair(is_header, 1),
-            KeyCode::Char('a') => self.open_pair_modal(is_header, None),
-            KeyCode::Enter | KeyCode::Char('e') => {
-                let index = if is_header {
-                    self.draft.selected_header
-                } else {
-                    self.draft.selected_form_data
-                };
-                self.open_pair_modal(is_header, Some(index));
-            }
-            KeyCode::Char('x') => self.remove_selected_pair(is_header),
-            _ => {}
+            Focus::Url | Focus::Body => true,
+            Focus::Sidebar => self.sidebar_searching,
+            Focus::Response => self
+                .response_search
+                .as_ref()
+                .is_some_and(|search| search.editing),
+            _ => false,
         }
     }
 
-    fn handle_response_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Up => self.scroll_response(-1),
-            KeyCode::Down => self.scroll_response(1),
-            KeyCode::PageUp => self.scroll_response(-10),
-            KeyCode::PageDown => self.scroll_response(10),
-            KeyCode::Home => self.response_scroll = 0,
-            _ => {}
+    pub fn on_tick(&mut self) {
+        if self.is_busy() {
+            self.spinner = self.spinner.wrapping_add(1);
         }
     }
 
-    fn handle_modal_key(&mut self, key: KeyEvent) -> AppCommand {
-        if self.handle_confirmation_key(key) {
+    /// Any input after sending means the user moved on; the response must not grab focus.
+    fn note_user_input(&mut self) {
+        self.focus_at_send = None;
+    }
+
+    pub fn handle_key(&mut self, key: KeyEvent) -> AppCommand {
+        self.note_user_input();
+        if is_ctrl(key, 'c') || is_ctrl(key, 'q') {
+            return self.perform(Action::Quit);
+        }
+
+        if self.overlay.is_some() {
+            return self.handle_overlay_key(key);
+        }
+
+        if is_ctrl(key, 'p') {
+            self.open_palette();
             return AppCommand::None;
         }
 
-        match key.code {
-            KeyCode::Esc => self.modal = None,
-            KeyCode::Tab | KeyCode::BackTab => self.advance_modal_field(),
-            KeyCode::Enter => self.submit_modal(),
-            _ => self.edit_modal_input(key),
-        }
-        AppCommand::None
-    }
-
-    fn handle_confirmation_key(&mut self, key: KeyEvent) -> bool {
-        let confirmation = matches!(
-            self.modal,
-            Some(Modal::ConfirmDeleteRequest { .. })
-                | Some(Modal::ConfirmDeleteEnv { .. })
-                | Some(Modal::ConfirmDeleteEnvValue { .. })
-        );
-
-        if !confirmation {
-            return false;
+        if let Some(action) = self.global_action(key) {
+            return self.perform(action);
         }
 
         match key.code {
-            KeyCode::Esc | KeyCode::Char('n') => {
-                self.modal = None;
-                true
+            KeyCode::Tab => {
+                self.cycle_focus(1);
+                return AppCommand::None;
             }
-            KeyCode::Enter | KeyCode::Char('y') => {
-                self.submit_modal();
-                true
+            KeyCode::BackTab => {
+                self.cycle_focus(-1);
+                return AppCommand::None;
             }
-            _ => true,
-        }
-    }
-
-    fn submit_modal(&mut self) {
-        let Some(modal) = self.modal.take() else {
-            return;
-        };
-
-        match modal {
-            Modal::ProjectName { name } => {
-                let project_name = name.value().trim().to_string();
-                if project_name.is_empty() {
-                    self.modal = Some(Modal::ProjectName { name });
-                    self.set_error("Project name is required");
-                    return;
-                }
-                match create_project(&project_name) {
-                    Ok(()) => {
-                        self.refresh_workspace();
-                        self.set_success(format!("Project '{project_name}' created"));
-                    }
-                    Err(err) => self.set_error(err.to_string()),
-                }
-            }
-            Modal::SaveRequest { name } => {
-                let request_name = name.value().trim().to_string();
-                if request_name.is_empty() {
-                    self.modal = Some(Modal::SaveRequest { name });
-                    self.set_error("Request name is required");
-                    return;
-                }
-                self.draft.name.set_value(request_name);
-                self.save_draft();
-            }
-            Modal::Header {
-                index, key, value, ..
-            } => self.upsert_draft_pair(true, index, key, value),
-            Modal::FormData {
-                index, key, value, ..
-            } => self.upsert_draft_pair(false, index, key, value),
-            Modal::EnvValue {
-                index,
-                old_key,
-                env,
-                key,
-                value,
-                ..
-            } => self.upsert_env_value(index, old_key, env, key, value),
-            Modal::Authorization { value } => self.save_authorization(value),
-            Modal::ConfirmDeleteRequest { name } => self.delete_saved_request(name),
-            Modal::ConfirmDeleteEnv { name } => self.delete_environment(name),
-            Modal::ConfirmDeleteEnvValue { env, key } => self.delete_env_value(env, key),
-        }
-    }
-
-    fn edit_modal_input(&mut self, key: KeyEvent) {
-        let Some(modal) = self.modal.as_mut() else {
-            return;
-        };
-
-        match modal {
-            Modal::ProjectName { name } | Modal::SaveRequest { name } => {
-                name.handle_key(key);
-            }
-            Modal::Header {
-                key: pair_key,
-                value,
-                active,
-                ..
-            }
-            | Modal::FormData {
-                key: pair_key,
-                value,
-                active,
-                ..
-            } => match active {
-                PairField::Key => {
-                    pair_key.handle_key(key);
-                }
-                PairField::Value => {
-                    value.handle_key(key);
-                }
-            },
-            Modal::EnvValue {
-                env,
-                key: env_key,
-                value,
-                active,
-                ..
-            } => match active {
-                EnvField::Environment => {
-                    env.handle_key(key);
-                }
-                EnvField::Key => {
-                    env_key.handle_key(key);
-                }
-                EnvField::Value => {
-                    value.handle_key(key);
-                }
-            },
-            Modal::Authorization { value } => {
-                value.handle_key(key);
-            }
-            Modal::ConfirmDeleteRequest { .. }
-            | Modal::ConfirmDeleteEnv { .. }
-            | Modal::ConfirmDeleteEnvValue { .. } => {}
-        }
-    }
-
-    fn advance_modal_field(&mut self) {
-        let Some(modal) = self.modal.as_mut() else {
-            return;
-        };
-
-        match modal {
-            Modal::Header { active, .. } | Modal::FormData { active, .. } => {
-                *active = active.next();
-            }
-            Modal::EnvValue { active, .. } => {
-                *active = active.next();
-            }
+            KeyCode::Esc => return self.handle_escape(),
+            KeyCode::Char('?') if !self.is_typing() => return self.perform(Action::Help),
             _ => {}
         }
+
+        match self.focus {
+            Focus::Sidebar => self.handle_sidebar_key(key),
+            Focus::Method => self.handle_method_key(key),
+            Focus::Url => self.handle_url_key(key),
+            Focus::Headers => self.handle_pair_key(key, PairTarget::Header),
+            Focus::Form => self.handle_pair_key(key, PairTarget::Form),
+            Focus::Body => {
+                self.draft.body.handle_key(key);
+                AppCommand::None
+            }
+            Focus::Auth => self.handle_auth_key(key),
+            Focus::Response => self.handle_response_key(key),
+            Focus::EnvList => self.handle_env_list_key(key),
+            Focus::EnvVars => self.handle_env_vars_key(key),
+        }
     }
 
-    fn active_input_mut(&mut self) -> Option<&mut TextInput> {
-        match (self.active_tab, self.focus) {
-            (Tab::Requests, Focus::RequestFilter) => Some(&mut self.request_filter),
-            (Tab::Requests, Focus::Url) => Some(&mut self.draft.url),
-            (Tab::Requests, Focus::RequestName) => Some(&mut self.draft.name),
-            (Tab::Requests, Focus::Body) => Some(&mut self.draft.body),
+    /// Shortcuts that work from anywhere outside overlays. They only use keys that legacy
+    /// terminals deliver reliably (Ctrl+letter and function keys).
+    fn global_action(&self, key: KeyEvent) -> Option<Action> {
+        if key.code == KeyCode::Enter && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Some(Action::Send);
+        }
+        if key.modifiers.contains(KeyModifiers::CONTROL) && !key.modifiers.contains(KeyModifiers::ALT)
+        {
+            return match key.code {
+                KeyCode::Char('r') => Some(Action::Send),
+                KeyCode::Char('s') => Some(Action::Save),
+                KeyCode::Char('n') => Some(Action::NewRequest),
+                KeyCode::Char('l') => Some(Action::FocusUrl),
+                KeyCode::Char('f') => Some(Action::FindRequest),
+                KeyCode::Char('g') => Some(Action::SwitchEnvironment),
+                KeyCode::Char('t') => Some(Action::ChangeMethod),
+                KeyCode::Char('o') => Some(Action::ImportOpenApi),
+                _ => None,
+            };
+        }
+        match key.code {
+            KeyCode::F(1) => Some(Action::ShowRequests),
+            KeyCode::F(2) => Some(Action::ShowEnvironments),
+            KeyCode::F(3) => Some(Action::Help),
             _ => None,
         }
     }
 
-    fn next_focus(&mut self) {
-        let order = self.focus_order();
-        let index = order
-            .iter()
-            .position(|focus| *focus == self.focus)
-            .unwrap_or_default();
-        self.focus = order[(index + 1) % order.len()];
-    }
-
-    fn previous_focus(&mut self) {
-        let order = self.focus_order();
-        let index = order
-            .iter()
-            .position(|focus| *focus == self.focus)
-            .unwrap_or_default();
-        self.focus = order[(index + order.len() - 1) % order.len()];
-    }
-
-    fn align_focus_to_tab(&mut self) {
-        let order = self.focus_order();
-        if !order.contains(&self.focus) {
-            self.focus = order[0];
-        }
-    }
-
-    fn focus_order(&self) -> &'static [Focus] {
-        match self.active_tab {
-            Tab::Requests => &[
-                Focus::SavedRequests,
-                Focus::RequestFilter,
-                Focus::Method,
-                Focus::Url,
-                Focus::RequestName,
-                Focus::Secure,
-                Focus::Headers,
-                Focus::FormData,
-                Focus::Body,
-                Focus::Response,
-            ],
-            Tab::Environments => &[Focus::EnvList, Focus::EnvValues],
-            Tab::Help => &[Focus::Response],
-        }
-    }
-
-    fn move_selected_request(&mut self, delta: isize) {
-        let visible = self.filtered_request_indices();
-        if visible.is_empty() {
-            self.selected_request = 0;
+    pub fn handle_paste(&mut self, text: &str) {
+        self.note_user_input();
+        if let Some(overlay) = self.overlay.as_mut() {
+            match overlay {
+                Overlay::Prompt(prompt) => {
+                    if let Some(field) = prompt.fields.get_mut(prompt.active) {
+                        field.input.insert_str(text);
+                    }
+                }
+                Overlay::Palette(palette) => {
+                    palette.input.insert_str(text);
+                    palette.selected = 0;
+                }
+                _ => {}
+            }
             return;
         }
 
-        let current = visible
-            .iter()
-            .position(|index| *index == self.selected_request)
-            .unwrap_or_default();
-        let next = move_index(current, visible.len(), delta);
-        self.selected_request = visible[next];
+        match self.focus {
+            Focus::Url => self.draft.url.insert_str(text.trim()),
+            Focus::Body => self.draft.body.insert_str(text),
+            Focus::Sidebar => {
+                self.sidebar_searching = true;
+                self.sidebar_filter.insert_str(text);
+                self.clamp_request_selection();
+            }
+            Focus::Response => {
+                if let Some(search) = self.response_search.as_mut().filter(|s| s.editing) {
+                    search.input.insert_str(text);
+                    self.update_response_search();
+                }
+            }
+            _ => {}
+        }
     }
 
-    pub fn visible_saved_requests(&self) -> Vec<(usize, &SavedRequestInfo)> {
-        self.filtered_request_indices()
-            .into_iter()
-            .filter_map(|index| {
-                self.saved_requests
-                    .get(index)
-                    .map(|request| (index, request))
-            })
-            .collect()
+    /// Runs a user-facing action, whether triggered by a key, the palette, or the mouse.
+    pub fn perform(&mut self, action: Action) -> AppCommand {
+        match action {
+            Action::Send => return self.send_request(),
+            Action::CancelRequest => return self.cancel_request(),
+            Action::Save => self.save_draft(None),
+            Action::SaveAs => self.open_save_prompt(None, true),
+            Action::NewRequest => self.guard_unsaved(PendingAction::New),
+            Action::OpenRequest => self.open_selected_request(),
+            Action::RenameRequest => self.open_rename_request_prompt(),
+            Action::DuplicateRequest => self.open_duplicate_request_prompt(),
+            Action::DeleteRequest => self.confirm_delete_selected_request(),
+            Action::FindRequest => self.start_sidebar_search(),
+            Action::FocusUrl => self.set_focus(Focus::Url),
+            Action::FocusBody => self.set_focus(Focus::Body),
+            Action::FocusResponse => self.set_focus(Focus::Response),
+            Action::ChangeMethod => self.open_method_picker(),
+            Action::ToggleSecure => self.toggle_secure(),
+            Action::FormatBody => self.format_body(),
+            Action::SwitchEnvironment => self.open_environment_picker(),
+            Action::ShowRequests => self.show_screen(Screen::Requests),
+            Action::ShowEnvironments => self.show_screen(Screen::Environments),
+            Action::NewEnvironment => self.open_new_environment_prompt(),
+            Action::EditAuthorization => {
+                let env = self
+                    .project
+                    .selected_environment
+                    .clone()
+                    .unwrap_or_else(|| NO_ENV.to_string());
+                self.open_authorization_prompt(env);
+            }
+            Action::ToggleSidebar => self.toggle_sidebar(),
+            Action::ToggleZoom => self.toggle_zoom(),
+            Action::SearchResponse => self.start_response_search(),
+            Action::CopyResponse => self.copy_response(),
+            Action::SaveResponse => self.open_save_response_prompt(false),
+            Action::SaveResponseTimestamped => self.open_save_response_prompt(true),
+            Action::OpenLastResponse => self.open_last_response(),
+            Action::ShowCliCommand => self.show_cli_command(),
+            Action::ShowCurlCommand => self.show_curl_command(),
+            Action::ImportOpenApi => self.confirm_import_openapi(),
+            Action::Reload => {
+                self.refresh_workspace();
+                if self.project_error.is_none() {
+                    self.set_success("Reloaded project from disk");
+                }
+            }
+            Action::CreateProject => {
+                if self.project.exists {
+                    self.set_info("This folder already has a gemon project");
+                } else {
+                    self.open_create_project_prompt();
+                }
+            }
+            Action::Help => self.overlay = Some(Overlay::Help { scroll: 0 }),
+            Action::Quit => self.guard_unsaved(PendingAction::Quit),
+        }
+        AppCommand::None
     }
 
-    pub fn selected_visible_request_position(&self) -> Option<usize> {
-        self.filtered_request_indices()
-            .iter()
-            .position(|index| *index == self.selected_request)
-    }
-
-    fn filtered_request_indices(&self) -> Vec<usize> {
-        let filter = self.request_filter.value().trim().to_ascii_lowercase();
-        self.saved_requests
-            .iter()
-            .enumerate()
-            .filter(|(_, request)| {
-                filter.is_empty()
-                    || request.name.to_ascii_lowercase().contains(&filter)
-                    || request.request_type.to_ascii_lowercase().contains(&filter)
-            })
-            .map(|(index, _)| index)
-            .collect()
-    }
-
-    fn select_visible_request(&mut self, visible_position: usize) {
-        if let Some(index) = self
-            .filtered_request_indices()
-            .get(visible_position)
-            .copied()
+    fn handle_escape(&mut self) -> AppCommand {
+        if self.focus == Focus::Sidebar && (self.sidebar_searching || !self.sidebar_filter.is_empty())
         {
-            self.selected_request = index;
-        }
-    }
-
-    fn load_selected_request(&mut self) {
-        if self.selected_visible_request_position().is_none() {
-            self.set_info("No matching saved request selected");
-            return;
-        }
-
-        let Some(saved) = self.saved_requests.get(self.selected_request) else {
-            self.set_info("No saved request selected");
-            return;
-        };
-
-        if saved.request_type != "REST" {
-            self.set_error("Only REST requests can be edited in the TUI");
-            return;
-        }
-
-        match read_saved_rest_request(&saved.name) {
-            Ok(request) => {
-                self.draft = RequestDraft::from_saved(&saved.name, request);
-                self.response = None;
-                self.focus = Focus::Url;
-                self.set_success(format!("Loaded '{}'", saved.name));
+            if self.sidebar_filter.is_empty() {
+                self.sidebar_searching = false;
+            } else {
+                self.sidebar_filter.clear();
+                self.clamp_request_selection();
             }
-            Err(err) => self.set_error(err.to_string()),
+            return AppCommand::None;
+        }
+        if self.focus == Focus::Response && self.response_search.is_some() {
+            self.response_search = None;
+            return AppCommand::None;
+        }
+        if self.is_busy() {
+            return self.cancel_request();
+        }
+        if self.response_zoomed {
+            self.response_zoomed = false;
+            return AppCommand::None;
+        }
+        if self.screen == Screen::Environments {
+            self.show_screen(Screen::Requests);
+        }
+        AppCommand::None
+    }
+
+    pub fn set_focus(&mut self, focus: Focus) {
+        self.screen = focus.screen();
+        if let Some(tab) = RequestTab::from_focus(focus) {
+            self.request_tab = tab;
+        }
+        if focus == Focus::Sidebar {
+            self.sidebar_visible = true;
+        } else {
+            self.sidebar_searching = false;
+        }
+        if focus != Focus::Response {
+            self.response_zoomed = false;
+            if let Some(search) = self.response_search.as_mut() {
+                search.editing = false;
+            }
+        }
+        self.focus = focus;
+    }
+
+    fn focus_order(&self) -> Vec<Focus> {
+        match self.screen {
+            Screen::Requests => REQUEST_FOCUS_ORDER
+                .into_iter()
+                .filter(|focus| *focus != Focus::Sidebar || self.sidebar_visible)
+                .collect(),
+            Screen::Environments => ENVIRONMENT_FOCUS_ORDER.to_vec(),
         }
     }
 
-    fn new_draft(&mut self) {
-        self.draft = RequestDraft::default();
-        self.response = None;
-        self.response_scroll = 0;
-        self.focus = Focus::Url;
-        self.set_info("New request draft");
-    }
-
-    fn save_draft(&mut self) {
-        if !self.ensure_project() {
-            return;
-        }
-
-        if self.draft.save_name().is_empty() {
-            self.modal = Some(Modal::SaveRequest {
-                name: TextInput::single(""),
-            });
-            return;
-        }
-
-        if let Err(message) = self.draft.validate_save() {
-            self.set_error(message);
-            return;
-        }
-
-        let name = self.draft.save_name();
-        let config = self.draft.to_config(false, false);
-        let request = RequestBuilder::build(&config);
-        save_request(request, &name);
-        self.refresh_workspace();
-        self.selected_request = self
-            .saved_requests
+    fn cycle_focus(&mut self, delta: isize) {
+        let order = self.focus_order();
+        let current = order
             .iter()
-            .position(|request| request.name == name)
-            .unwrap_or(self.selected_request);
-        self.set_success(format!("Saved '{name}'"));
-    }
-
-    fn confirm_delete_selected_request(&mut self) {
-        if self.selected_visible_request_position().is_none() {
-            self.set_info("No matching saved request selected");
-            return;
-        }
-
-        let Some(saved) = self.saved_requests.get(self.selected_request) else {
-            self.set_info("No saved request selected");
-            return;
-        };
-
-        self.modal = Some(Modal::ConfirmDeleteRequest {
-            name: saved.name.clone(),
-        });
-    }
-
-    fn delete_saved_request(&mut self, name: String) {
-        match delete_request(&name) {
-            Ok(()) => {
-                self.refresh_workspace();
-                self.set_success(format!("Deleted '{name}'"));
-            }
-            Err(err) => self.set_error(err.to_string()),
-        }
-    }
-
-    fn import_openapi(&mut self) {
-        if !self.ensure_project() {
-            return;
-        }
-
-        match import_openapi_project_requests() {
-            Ok(report) => {
-                self.refresh_workspace();
-                if let Some(name) = report.request_names.first() {
-                    self.request_filter.set_value(String::new());
-                    self.selected_request = self
-                        .saved_requests
-                        .iter()
-                        .position(|request| request.name == *name)
-                        .unwrap_or(self.selected_request);
-                    self.focus = Focus::SavedRequests;
-                }
-
-                if report.requests_imported == 0 {
-                    self.set_info(report.summary());
-                } else {
-                    self.set_success(report.summary());
-                }
-            }
-            Err(err) => self.set_error(err.to_string()),
-        }
-    }
-
-    fn move_selected_pair(&mut self, is_header: bool, delta: isize) {
-        if is_header {
-            self.draft.selected_header =
-                move_index(self.draft.selected_header, self.draft.headers.len(), delta);
-        } else {
-            self.draft.selected_form_data = move_index(
-                self.draft.selected_form_data,
-                self.draft.form_data.len(),
-                delta,
-            );
-        }
-    }
-
-    fn select_pair_at(&mut self, is_header: bool, index: usize) {
-        if is_header {
-            if index < self.draft.headers.len() {
-                self.draft.selected_header = index;
-            }
-        } else if index < self.draft.form_data.len() {
-            self.draft.selected_form_data = index;
-        }
-    }
-
-    fn open_pair_modal(&mut self, is_header: bool, index: Option<usize>) {
-        let pair = if is_header {
-            index.and_then(|idx| self.draft.headers.get(idx).cloned())
-        } else {
-            index.and_then(|idx| self.draft.form_data.get(idx).cloned())
-        }
-        .unwrap_or_default();
-
-        self.modal = if is_header {
-            Some(Modal::Header {
-                index,
-                key: TextInput::single(pair.key),
-                value: TextInput::single(pair.value),
-                active: PairField::Key,
-            })
-        } else {
-            Some(Modal::FormData {
-                index,
-                key: TextInput::single(pair.key),
-                value: TextInput::single(pair.value),
-                active: PairField::Key,
-            })
-        };
-    }
-
-    fn upsert_draft_pair(
-        &mut self,
-        is_header: bool,
-        index: Option<usize>,
-        key: TextInput,
-        value: TextInput,
-    ) {
-        let key_value = KeyValue {
-            key: key.value().trim().to_string(),
-            value: value.value(),
-        };
-
-        if key_value.key.is_empty() {
-            self.set_error("Key is required");
-            return;
-        }
-
-        let (pairs, selected) = if is_header {
-            (&mut self.draft.headers, &mut self.draft.selected_header)
-        } else {
-            (
-                &mut self.draft.form_data,
-                &mut self.draft.selected_form_data,
-            )
-        };
-
-        match index {
-            Some(index) if index < pairs.len() => {
-                pairs[index] = key_value;
-                *selected = index;
-            }
-            _ => {
-                pairs.push(key_value);
-                *selected = pairs.len().saturating_sub(1);
-            }
-        }
-
-        self.focus = if is_header {
-            Focus::Headers
-        } else {
-            Focus::FormData
-        };
-        self.set_success("Request value updated");
-    }
-
-    fn remove_selected_pair(&mut self, is_header: bool) {
-        let (pairs, selected) = if is_header {
-            (&mut self.draft.headers, &mut self.draft.selected_header)
-        } else {
-            (
-                &mut self.draft.form_data,
-                &mut self.draft.selected_form_data,
-            )
-        };
-
-        if pairs.is_empty() {
-            return;
-        }
-
-        let index = (*selected).min(pairs.len() - 1);
-        pairs.remove(index);
-        *selected = (*selected).min(pairs.len().saturating_sub(1));
-        self.set_success("Request value removed");
-    }
-
-    fn move_selected_env(&mut self, delta: isize) {
-        self.selected_env = move_index(self.selected_env, self.project.environments.len(), delta);
-        self.selected_env_value = 0;
-    }
-
-    fn select_env_at(&mut self, index: usize) {
-        if index < self.project.environments.len() {
-            self.selected_env = index;
-            self.selected_env_value = 0;
-        }
-    }
-
-    fn move_selected_env_value(&mut self, delta: isize) {
-        let len = self
-            .project
-            .environments
-            .get(self.selected_env)
-            .map(|env| env.values.len())
+            .position(|focus| *focus == self.focus)
             .unwrap_or_default();
-        self.selected_env_value = move_index(self.selected_env_value, len, delta);
+        let next = move_index(current, order.len(), delta);
+        self.set_focus(order[next]);
     }
 
-    fn select_env_value_at(&mut self, index: usize) {
-        if index < self.current_env_value_count() {
-            self.selected_env_value = index;
-        }
-    }
-
-    fn scroll_response(&mut self, delta: isize) {
-        if delta.is_negative() {
-            self.response_scroll = self
-                .response_scroll
-                .saturating_sub(delta.unsigned_abs() as u16);
-        } else {
-            self.response_scroll = self.response_scroll.saturating_add(delta as u16);
-        }
-    }
-
-    fn select_current_env(&mut self) {
-        let Some(env) = self.project.environments.get(self.selected_env) else {
-            self.set_info("No environment selected");
-            return;
-        };
-        let env_name = env.name.clone();
-
-        match set_selected_env(&env_name) {
-            Ok(()) => {
-                self.refresh_workspace();
-                self.set_success(format!("Selected environment '{env_name}'"));
-            }
-            Err(err) => self.set_error(err.to_string()),
-        }
-    }
-
-    fn open_env_value_modal(&mut self, index: Option<usize>) {
-        if !self.ensure_project() {
+    fn show_screen(&mut self, screen: Screen) {
+        if self.screen == screen {
             return;
         }
-
-        let env = self.project.environments.get(self.selected_env);
-        let pair = env
-            .and_then(|env| index.and_then(|idx| env.values.get(idx).cloned()))
-            .unwrap_or_default();
-
-        self.modal = Some(Modal::EnvValue {
-            index,
-            old_key: if pair.key.is_empty() {
-                None
-            } else {
-                Some(pair.key.clone())
-            },
-            env: TextInput::single(env.map(|env| env.name.clone()).unwrap_or_default()),
-            key: TextInput::single(pair.key),
-            value: TextInput::single(pair.value),
-            active: if env.is_some() {
-                EnvField::Key
-            } else {
-                EnvField::Environment
-            },
-        });
-    }
-
-    fn upsert_env_value(
-        &mut self,
-        _index: Option<usize>,
-        old_key: Option<String>,
-        env: TextInput,
-        key: TextInput,
-        value: TextInput,
-    ) {
-        let env_name = env.value().trim().to_string();
-        let key_name = key.value().trim().to_string();
-
-        if env_name.is_empty() || key_name.is_empty() {
-            self.set_error("Environment and key are required");
-            return;
-        }
-
-        if let Some(old_key) = old_key {
-            if old_key != key_name {
-                let _ = remove_env_value(&env_name, &old_key);
+        match screen {
+            Screen::Requests => self.set_focus(Focus::Url),
+            Screen::Environments => {
+                self.selected_env = self.active_env_row();
+                self.selected_env_var = 0;
+                self.set_focus(Focus::EnvList);
             }
         }
+    }
 
-        match add_env_value(&env_name, (key_name.clone(), value.value())) {
-            Ok(()) => {
-                self.refresh_workspace();
-                self.selected_env = self
-                    .project
-                    .environments
-                    .iter()
-                    .position(|env| env.name == env_name)
-                    .unwrap_or(self.selected_env);
-                self.selected_env_value = self
-                    .project
-                    .environments
-                    .get(self.selected_env)
-                    .and_then(|env| env.values.iter().position(|pair| pair.key == key_name))
-                    .unwrap_or_default();
-                self.focus = Focus::EnvValues;
-                self.set_success("Environment value saved");
-            }
-            Err(err) => self.set_error(err.to_string()),
+    fn toggle_sidebar(&mut self) {
+        self.sidebar_visible = !self.sidebar_visible;
+        if !self.sidebar_visible && self.focus == Focus::Sidebar {
+            self.set_focus(Focus::Url);
         }
     }
 
-    fn confirm_delete_current_env(&mut self) {
-        let Some(env) = self.project.environments.get(self.selected_env) else {
-            self.set_info("No environment selected");
-            return;
-        };
-
-        self.modal = Some(Modal::ConfirmDeleteEnv {
-            name: env.name.clone(),
-        });
-    }
-
-    fn delete_environment(&mut self, name: String) {
-        match remove_env(&name) {
-            Ok(()) => {
-                self.refresh_workspace();
-                self.set_success(format!("Deleted environment '{name}'"));
-            }
-            Err(err) => self.set_error(err.to_string()),
-        }
-    }
-
-    fn confirm_delete_current_env_value(&mut self) {
-        let Some(env) = self.project.environments.get(self.selected_env) else {
-            self.set_info("No environment selected");
-            return;
-        };
-        let Some(pair) = env.values.get(self.selected_env_value) else {
-            self.set_info("No environment value selected");
-            return;
-        };
-
-        self.modal = Some(Modal::ConfirmDeleteEnvValue {
-            env: env.name.clone(),
-            key: pair.key.clone(),
-        });
-    }
-
-    fn delete_env_value(&mut self, env: String, key: String) {
-        match remove_env_value(&env, &key) {
-            Ok(()) => {
-                self.refresh_workspace();
-                self.set_success(format!("Deleted '{key}' from '{env}'"));
-            }
-            Err(err) => self.set_error(err.to_string()),
-        }
-    }
-
-    fn open_authorization_modal(&mut self) {
-        if !self.ensure_project() {
-            return;
-        }
-
-        self.modal = Some(Modal::Authorization {
-            value: TextInput::single(""),
-        });
-    }
-
-    fn save_authorization(&mut self, value: TextInput) {
-        let authorization = value.value();
-        let result = if authorization.trim().is_empty() {
-            remove_authorization()
-        } else {
-            add_authorization(&authorization)
-        };
-
-        match result {
-            Ok(()) => {
-                self.refresh_workspace();
-                if authorization.trim().is_empty() {
-                    self.set_success("Authorization removed");
-                } else {
-                    self.set_success("Authorization saved");
-                }
-            }
-            Err(err) => self.set_error(err.to_string()),
-        }
-    }
-
-    fn ensure_project(&mut self) -> bool {
+    fn require_project(&mut self) -> bool {
         if self.project.exists {
             return true;
         }
-
-        self.modal = Some(Modal::ProjectName {
-            name: TextInput::single(""),
-        });
-        self.set_error("Create a project before using this action");
+        if let Some(err) = &self.project_error {
+            self.set_error(format!("{err}. Fix gemon.json and reload."));
+            return false;
+        }
+        self.open_create_project_prompt();
+        self.set_warning("This needs a project. Create one first.");
         false
     }
 
-    fn clamp_request_selection(&mut self) {
-        if self.saved_requests.is_empty() {
-            self.selected_request = 0;
-            return;
-        }
-
-        self.selected_request = self
-            .selected_request
-            .min(self.saved_requests.len().saturating_sub(1));
-
-        let visible = self.filtered_request_indices();
-        if !visible.is_empty() && !visible.contains(&self.selected_request) {
-            self.selected_request = visible[0];
-        }
+    pub fn set_info(&mut self, message: impl Into<String>) {
+        self.set_status(message, StatusKind::Info);
     }
 
-    fn clamp_environment_selection(&mut self) {
-        self.selected_env = self
-            .selected_env
-            .min(self.project.environments.len().saturating_sub(1));
-        self.selected_env_value = self
-            .selected_env_value
-            .min(self.current_env_value_count().saturating_sub(1));
+    pub fn set_success(&mut self, message: impl Into<String>) {
+        self.set_status(message, StatusKind::Success);
     }
 
-    fn current_env_value_count(&self) -> usize {
-        self.project
-            .environments
-            .get(self.selected_env)
-            .map(|env| env.values.len())
-            .unwrap_or_default()
+    pub fn set_warning(&mut self, message: impl Into<String>) {
+        self.set_status(message, StatusKind::Warning);
     }
 
-    fn set_info(&mut self, message: impl Into<String>) {
+    pub fn set_error(&mut self, message: impl Into<String>) {
+        self.set_status(message, StatusKind::Error);
+    }
+
+    fn set_status(&mut self, message: impl Into<String>, kind: StatusKind) {
         self.status = StatusLine {
             message: message.into(),
-            kind: StatusKind::Info,
-        };
-    }
-
-    fn set_success(&mut self, message: impl Into<String>) {
-        self.status = StatusLine {
-            message: message.into(),
-            kind: StatusKind::Success,
-        };
-    }
-
-    fn set_error(&mut self, message: impl Into<String>) {
-        self.status = StatusLine {
-            message: message.into(),
-            kind: StatusKind::Error,
+            kind,
         };
     }
 }
 
-fn move_index(current: usize, len: usize, delta: isize) -> usize {
+fn is_ctrl(key: KeyEvent, character: char) -> bool {
+    key.modifiers.contains(KeyModifiers::CONTROL)
+        && matches!(key.code, KeyCode::Char(c) if c.eq_ignore_ascii_case(&character))
+}
+
+pub fn move_index(current: usize, len: usize, delta: isize) -> usize {
     if len == 0 {
         return 0;
     }
-
-    let len = len as isize;
-    let next = (current as isize + delta).rem_euclid(len);
-    next as usize
+    (current as isize + delta).rem_euclid(len as isize) as usize
 }
 
-fn list_row_at(area: Rect, row: u16) -> Option<usize> {
-    row.checked_sub(area.y.saturating_add(1))
-        .map(usize::from)
-        .filter(|index| *index < area.height.saturating_sub(2) as usize)
+/// Moves within `0..len` without wrapping, for paging through long lists.
+pub fn step_index(current: usize, len: usize, delta: isize) -> usize {
+    if len == 0 {
+        return 0;
+    }
+    (current as isize + delta).clamp(0, len as isize - 1) as usize
 }
 
-fn table_row_at(area: Rect, row: u16) -> Option<usize> {
-    row.checked_sub(area.y.saturating_add(2))
-        .map(usize::from)
-        .filter(|index| *index < area.height.saturating_sub(3) as usize)
-}
-
-fn composer_focus_at(area: Rect, column: u16, row: u16) -> Focus {
-    match row.saturating_sub(area.y.saturating_add(1)) {
-        0 if column < area.x.saturating_add(20) => Focus::Method,
-        0 => Focus::Secure,
-        1 => Focus::Url,
-        2 => Focus::RequestName,
-        _ => Focus::Url,
+pub fn format_size(bytes: usize) -> String {
+    match bytes {
+        0..=1023 => format!("{bytes} B"),
+        1024..=1_048_575 => format!("{:.1} KB", bytes as f64 / 1024.0),
+        _ => format!("{:.1} MB", bytes as f64 / 1_048_576.0),
     }
 }
 
-fn on_vertical_boundary(left: Rect, right: Rect, column: u16, row: u16) -> bool {
-    let boundary_left = left.x.saturating_add(left.width).saturating_sub(1);
-    let boundary_right = right.x;
-    row >= left.y.min(right.y)
-        && row
-            < left
-                .y
-                .saturating_add(left.height)
-                .max(right.y.saturating_add(right.height))
-        && (column == boundary_left || column == boundary_right)
-}
-
-fn on_horizontal_boundary(top: Rect, bottom: Rect, column: u16, row: u16) -> bool {
-    let boundary_top = top.y.saturating_add(top.height).saturating_sub(1);
-    let boundary_bottom = bottom.y;
-    column >= top.x.min(bottom.x)
-        && column
-            < top
-                .x
-                .saturating_add(top.width)
-                .max(bottom.x.saturating_add(bottom.width))
-        && (row == boundary_top || row == boundary_bottom)
-}
-
-fn percent_at(position: u16, origin: u16, length: u16) -> u16 {
-    if length == 0 {
-        return 50;
-    }
-
-    let relative = position.saturating_sub(origin).min(length);
-    ((u32::from(relative) * 100) / u32::from(length)) as u16
-}
-
-fn format_response_body(bytes: &[u8]) -> String {
-    match serde_json::from_slice::<Value>(bytes) {
-        Ok(value) => serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string()),
-        Err(_) => String::from_utf8_lossy(bytes).to_string(),
+pub fn format_duration(duration: Duration) -> String {
+    let millis = duration.as_millis();
+    if millis < 1000 {
+        format!("{millis} ms")
+    } else {
+        format!("{:.2} s", duration.as_secs_f64())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{
-        layout, move_index, App, Focus, Modal, RequestDraft, ResponseView, Tab, TextInput,
-    };
-    use crate::project::project_handler::SavedRequestInfo;
-    use crossterm::event::{
-        KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
-    };
-    use ratatui::layout::Rect;
-
-    fn ctrl_key(character: char) -> KeyEvent {
-        KeyEvent::new(KeyCode::Char(character), KeyModifiers::CONTROL)
+pub fn status_text(status: u16) -> String {
+    match reqwest::StatusCode::from_u16(status)
+        .ok()
+        .and_then(|code| code.canonical_reason())
+    {
+        Some(reason) => format!("{status} {reason}"),
+        None => status.to_string(),
     }
+}
 
-    fn ctrl_code(code: KeyCode) -> KeyEvent {
-        KeyEvent::new(code, KeyModifiers::CONTROL)
+/// Shows the first and last characters of a secret.
+pub fn mask_secret(secret: &str) -> String {
+    let chars = secret.chars().collect::<Vec<_>>();
+    if chars.len() <= 12 {
+        return "•".repeat(chars.len().max(4));
     }
-
-    fn function_key(number: u8) -> KeyEvent {
-        KeyEvent::new(KeyCode::F(number), KeyModifiers::NONE)
-    }
-
-    fn plain_key(code: KeyCode) -> KeyEvent {
-        KeyEvent::new(code, KeyModifiers::NONE)
-    }
-
-    fn mouse(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
-        MouseEvent {
-            kind,
-            column,
-            row,
-            modifiers: KeyModifiers::NONE,
-        }
-    }
-
-    fn saved(name: &str) -> SavedRequestInfo {
-        SavedRequestInfo {
-            name: name.to_string(),
-            request_type: String::from("REST"),
-        }
-    }
-
-    #[test]
-    fn move_index_wraps_around_lists() {
-        assert_eq!(move_index(0, 3, -1), 2);
-        assert_eq!(move_index(2, 3, 1), 0);
-        assert_eq!(move_index(0, 0, 1), 0);
-    }
-
-    #[test]
-    fn request_validation_requires_uri() {
-        let draft = RequestDraft::default();
-
-        assert!(draft.validate_request().is_err());
-    }
-
-    #[test]
-    fn request_filter_limits_visible_requests_and_selection() {
-        let mut app = App::new();
-        app.modal = None;
-        app.saved_requests = vec![saved("listPets"), saved("createPet"), saved("healthCheck")];
-        app.selected_request = 0;
-
-        app.request_filter.set_value(String::from("create"));
-        app.clamp_request_selection();
-
-        let visible = app.visible_saved_requests();
-        assert_eq!(visible.len(), 1);
-        assert_eq!(visible[0].1.name, "createPet");
-        assert_eq!(app.selected_request, 1);
-
-        app.move_selected_request(1);
-        assert_eq!(app.selected_request, 1);
-    }
-
-    #[test]
-    fn slash_focuses_filter_and_escape_clears_it() {
-        let mut app = App::new();
-        app.modal = None;
-        app.focus = Focus::SavedRequests;
-        app.request_filter.set_value(String::from("pet"));
-
-        app.handle_key(plain_key(KeyCode::Char('/')));
-        assert_eq!(app.focus, Focus::RequestFilter);
-
-        app.handle_key(plain_key(KeyCode::Esc));
-        assert_eq!(app.focus, Focus::RequestFilter);
-        assert!(app.request_filter.value().is_empty());
-
-        app.handle_key(plain_key(KeyCode::Esc));
-        assert_eq!(app.focus, Focus::SavedRequests);
-    }
-
-    #[test]
-    fn function_keys_follow_header_order() {
-        let mut app = App::new();
-        app.modal = None;
-
-        app.handle_key(function_key(1));
-        assert_eq!(app.active_tab, Tab::Requests);
-        assert_eq!(app.focus, Focus::SavedRequests);
-
-        app.handle_key(function_key(2));
-        assert_eq!(app.active_tab, Tab::Environments);
-        assert_eq!(app.focus, Focus::EnvList);
-
-        app.handle_key(function_key(3));
-        assert_eq!(app.active_tab, Tab::Help);
-    }
-
-    #[test]
-    fn ctrl_number_shortcuts_focus_sections() {
-        let mut app = App::new();
-        app.modal = None;
-
-        app.handle_key(ctrl_key('5'));
-        assert_eq!(app.active_tab, Tab::Requests);
-        assert_eq!(app.focus, Focus::Headers);
-
-        app.handle_key(ctrl_key('0'));
-        assert_eq!(app.active_tab, Tab::Environments);
-        assert_eq!(app.focus, Focus::EnvValues);
-
-        app.handle_key(ctrl_code(KeyCode::Char(' ')));
-        assert_eq!(app.active_tab, Tab::Requests);
-        assert_eq!(app.focus, Focus::Url);
-    }
-
-    #[test]
-    fn ctrl_three_and_four_are_unbound_for_tmux() {
-        let mut app = App::new();
-        app.modal = None;
-        app.focus = Focus::Url;
-
-        app.handle_key(ctrl_key('3'));
-        assert_eq!(app.focus, Focus::Url);
-
-        app.handle_key(ctrl_key('4'));
-        assert_eq!(app.focus, Focus::Url);
-    }
-
-    #[test]
-    fn ctrl_number_shortcuts_do_not_edit_focused_text_fields() {
-        let mut app = App::new();
-        app.modal = None;
-        app.focus = Focus::Url;
-        app.draft.url.set_value(String::from("https://api.test"));
-
-        app.handle_key(ctrl_key('5'));
-
-        assert_eq!(app.active_tab, Tab::Requests);
-        assert_eq!(app.focus, Focus::Headers);
-        assert_eq!(app.draft.url.value(), "https://api.test");
-    }
-
-    #[test]
-    fn ctrl_number_shortcuts_work_when_modal_is_open() {
-        let mut app = App::new();
-        app.modal = Some(Modal::SaveRequest {
-            name: TextInput::single("draft"),
-        });
-
-        app.handle_key(ctrl_key('0'));
-
-        assert_eq!(app.active_tab, Tab::Environments);
-        assert_eq!(app.focus, Focus::EnvValues);
-        assert!(app.modal.is_none());
-    }
-
-    #[test]
-    fn ctrl_c_quits_even_when_modal_is_open() {
-        let mut app = App::new();
-
-        app.handle_key(ctrl_key('c'));
-
-        assert!(app.should_quit);
-    }
-
-    #[test]
-    fn mouse_click_selects_visible_saved_request() {
-        let mut app = App::new();
-        app.modal = None;
-        app.saved_requests = vec![saved("first"), saved("second"), saved("third")];
-        let area = Rect::new(0, 0, 100, 40);
-        let root = layout::root(area);
-        let requests = layout::requests(
-            root.body,
-            app.request_list_width,
-            app.pair_split_percent,
-            app.body_split_percent,
-        );
-
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::Down(MouseButton::Left),
-                requests.saved_list.x + 2,
-                requests.saved_list.y + 2,
-            ),
-            area,
-        );
-
-        assert_eq!(app.focus, Focus::SavedRequests);
-        assert_eq!(app.selected_request, 1);
-    }
-
-    #[test]
-    fn mouse_wheel_scrolls_saved_request_list() {
-        let mut app = App::new();
-        app.modal = None;
-        app.saved_requests = vec![saved("first"), saved("second"), saved("third")];
-        app.selected_request = 0;
-        let area = Rect::new(0, 0, 100, 40);
-        let root = layout::root(area);
-        let requests = layout::requests(
-            root.body,
-            app.request_list_width,
-            app.pair_split_percent,
-            app.body_split_percent,
-        );
-
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::ScrollDown,
-                requests.saved_list.x + 2,
-                requests.saved_list.y + 1,
-            ),
-            area,
-        );
-
-        assert_eq!(app.focus, Focus::SavedRequests);
-        assert_eq!(app.selected_request, 1);
-    }
-
-    #[test]
-    fn mouse_click_focuses_composer_url_field() {
-        let mut app = App::new();
-        app.modal = None;
-        let area = Rect::new(0, 0, 100, 40);
-        let root = layout::root(area);
-        let requests = layout::requests(
-            root.body,
-            app.request_list_width,
-            app.pair_split_percent,
-            app.body_split_percent,
-        );
-
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::Down(MouseButton::Left),
-                requests.composer.x + 8,
-                requests.composer.y + 2,
-            ),
-            area,
-        );
-
-        assert_eq!(app.focus, Focus::Url);
-    }
-
-    #[test]
-    fn mouse_click_navigates_header_tabs() {
-        let mut app = App::new();
-        app.modal = None;
-        let area = Rect::new(0, 0, 120, 40);
-        let root = layout::root(area);
-
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::Down(MouseButton::Left),
-                root.tabs.x + (root.tabs.width / 3) + 1,
-                root.tabs.y + 1,
-            ),
-            area,
-        );
-
-        assert_eq!(app.active_tab, Tab::Environments);
-        assert_eq!(app.focus, Focus::EnvList);
-    }
-
-    #[test]
-    fn mouse_wheel_scrolls_response_under_pointer() {
-        let mut app = App::new();
-        app.modal = None;
-        app.response = Some(ResponseView {
-            status: 200,
-            elapsed_ms: 10,
-            size_bytes: 2,
-            headers: Vec::new(),
-            body: String::from("one\ntwo\nthree"),
-        });
-        let area = Rect::new(0, 0, 100, 40);
-        let root = layout::root(area);
-        let requests = layout::requests(
-            root.body,
-            app.request_list_width,
-            app.pair_split_percent,
-            app.body_split_percent,
-        );
-
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::ScrollDown,
-                requests.response.x + 2,
-                requests.response.y + 1,
-            ),
-            area,
-        );
-
-        assert_eq!(app.focus, Focus::Response);
-        assert_eq!(app.response_scroll, 1);
-    }
-
-    #[test]
-    fn mouse_drag_resizes_request_list() {
-        let mut app = App::new();
-        app.modal = None;
-        let area = Rect::new(0, 0, 120, 40);
-        let root = layout::root(area);
-        let requests = layout::requests(
-            root.body,
-            app.request_list_width,
-            app.pair_split_percent,
-            app.body_split_percent,
-        );
-        let original_width = app.request_list_width;
-
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::Down(MouseButton::Left),
-                requests.saved.x + requests.saved.width - 1,
-                requests.saved.y + 4,
-            ),
-            area,
-        );
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::Drag(MouseButton::Left),
-                requests.saved.x + requests.saved.width + 10,
-                requests.saved.y + 4,
-            ),
-            area,
-        );
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::Up(MouseButton::Left),
-                requests.saved.x + requests.saved.width + 10,
-                requests.saved.y + 4,
-            ),
-            area,
-        );
-
-        assert!(app.request_list_width > original_width);
-        assert!(app.drag_target.is_none());
-    }
-
-    #[test]
-    fn mouse_drag_resizes_body_response_split() {
-        let mut app = App::new();
-        app.modal = None;
-        let area = Rect::new(0, 0, 120, 40);
-        let root = layout::root(area);
-        let requests = layout::requests(
-            root.body,
-            app.request_list_width,
-            app.pair_split_percent,
-            app.body_split_percent,
-        );
-        let original_percent = app.body_split_percent;
-        let boundary_row = requests.response.y;
-
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::Down(MouseButton::Left),
-                requests.body.x + 4,
-                boundary_row,
-            ),
-            area,
-        );
-        app.handle_mouse(
-            mouse(
-                MouseEventKind::Drag(MouseButton::Left),
-                requests.body.x + 4,
-                requests.body.y,
-            ),
-            area,
-        );
-
-        assert_ne!(app.body_split_percent, original_percent);
-    }
+    let head = chars[..6].iter().collect::<String>();
+    let tail = chars[chars.len() - 4..].iter().collect::<String>();
+    format!("{head}…{tail}")
 }

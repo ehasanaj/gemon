@@ -40,28 +40,52 @@ import-openapi | --import-openapi : Import REST requests from openapi.yaml files
 
 ### Interactive TUI
 
-Open Gemon's terminal user interface:
+Open Gemon's terminal user interface in a project folder:
 
 ```sh
 gemon tui
 ```
 
-The TUI provides a project-aware workspace for composing REST requests, loading and saving
-project requests, managing environment variables, setting authorization, sending requests, and
-reviewing response status, duration, size, headers, and formatted bodies.
+The TUI covers everything the CLI does — creating a project, composing, sending, saving and
+organizing requests, environments and their variables, authorization, OpenAPI import, and saving
+responses — and it is fully usable with the keyboard alone. Requests are sent in the background:
+the interface stays responsive and `Esc` cancels a slow request.
 
-Useful shortcuts:
+The screen is split into the saved-request list, the URL bar (method + URL), a tabbed request
+editor (Headers, Body, Form, Auth) and the response viewer (Body, Headers). `Tab` and
+`Shift-Tab` move between panels, and the bottom bar always shows the keys for the focused panel.
+Press `Ctrl-P` for a searchable list of every command, or `F3` (`?` outside text fields) for
+the full shortcut reference.
+
+Everywhere:
 
 ```sh
-F1 requests       F2 environments     F3 help
-Tab next field    Shift-Tab previous  Ctrl-C/Ctrl-Q quit
-Ctrl-R send       Ctrl-S save         Ctrl-N new request
-Ctrl-O import     Ctrl-D delete       Ctrl-L reload
-Ctrl-F filter     / filter            Mouse select/scroll/resize
-Ctrl-1 saved      Ctrl-2 composer     Ctrl-5 headers
-Ctrl-6 form data  Ctrl-7 body         Ctrl-8 response
-Ctrl-9 env list   Ctrl-0 env values
+Tab / Shift-Tab   next / previous panel     Ctrl-P   command palette
+Ctrl-R            send request              Ctrl-S   save request
+Ctrl-N            new request               Ctrl-L   edit URL
+Ctrl-F            search saved requests     Ctrl-T   choose method
+Ctrl-G            switch environment        Ctrl-O   import openapi.yaml
+F1 / F2           requests / environments   F3, ?    help
+Esc               close, clear, cancel      Ctrl-Q   quit (asks about unsaved changes)
 ```
+
+In panels:
+
+```sh
+URL bar           Enter sends the request
+Request list      Enter open, / filter, n new, r rename, c duplicate, d delete, < > resize
+Headers / Form    a add, Enter edit, d delete
+Body              Enter keeps indentation, braces indent automatically
+Auth              Space toggles sending the environment's authorization, e edits it
+Response          arrows scroll, ←→ body/headers, / search (n/N), y copy, s save, z full screen
+Environments      Enter activate, n new, r rename, d delete, a add variable, u authorization
+Text fields       Ctrl-A/E line start/end, Ctrl-U/K delete to start/end, Ctrl-W delete word
+```
+
+Environment placeholders such as `{base_uri}` are resolved when a request is sent; the URL bar
+shows the resolved URL and warns about placeholders the active environment does not define. The
+TUI picks up changes made with the CLI in another terminal automatically. Mouse clicks, the
+wheel, and dragging panel borders work too, but are never required.
 
 ### OpenAPI Import
 
@@ -113,7 +137,7 @@ gemon -ed=(env_name)
 Remove an environment variable:
 
 ```sh
-gemon -edv=(env_name::variable_name)
+gemon -edv=(env_name::variable_name) | --env-delete-value=(env_name::variable_name)
 ```
 
 Select a previously created environment as the current environment:
@@ -163,7 +187,7 @@ gemon -b=('{"name": "some name"}') | --body=('{"name": "some name"}')
 Set a form data parameter:
 
 ```sh
-gemon -fd=(key:value) | --form-data=(key:value)
+gemon -fd=(key::value) | --form-data=(key::value)
 ```
 
 Set authorization for selected env (if no env selected set default authorization)
@@ -172,7 +196,9 @@ Set authorization for selected env (if no env selected set default authorization
 gemon -auth='Bearer token...' | --authorization='Bearer token...'
 ```
 
-Mark request secured that needs to be authorized
+Mark request secured that needs to be authorized. The authorization of the selected environment
+(or the default one) is added when the request is sent, unless an `authorization` header is set.
+Saved requests remember this flag.
 
 ```sh
 gemon -sec | --secure
@@ -206,10 +232,10 @@ gemon -rf=(file_name.json) | --response-file=(file_name.json)
 
 ### Request Management
 
-Save the response into the project for future calls:
+Save the request into the project for future calls:
 
 ```sh
-gemon -s | --save
+gemon -s=(request_name) | --save=(request_name)
 ```
 
 Call a previously saved request:

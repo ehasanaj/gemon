@@ -1,6 +1,7 @@
 use super::request_builder::{GemonRequest, GemonResponse};
 use crate::config::types::GemonMethodType;
 use crate::constants;
+use crate::project::project_handler::authorization;
 use reqwest::{
     self,
     header::{self, HeaderMap, ACCEPT, CONTENT_TYPE},
@@ -31,6 +32,7 @@ pub struct GemonRestRequestBuilder {
     headers: HashMap<String, String>,
     body: Option<String>,
     form_data: HashMap<String, String>,
+    secure: bool,
 }
 
 impl GemonRestRequestBuilder {
@@ -41,6 +43,7 @@ impl GemonRestRequestBuilder {
             headers: HashMap::new(),
             body: None,
             form_data: HashMap::new(),
+            secure: false,
         }
     }
 
@@ -79,6 +82,10 @@ impl GemonRestRequestBuilder {
         }
     }
 
+    pub fn set_secure(self, secure: bool) -> GemonRestRequestBuilder {
+        GemonRestRequestBuilder { secure, ..self }
+    }
+
     pub fn build(&self) -> GemonRestRequest {
         GemonRestRequest {
             gemon_method_type: self
@@ -92,6 +99,7 @@ impl GemonRestRequestBuilder {
             headers: self.headers.clone(),
             body: self.body.clone(),
             form_data: self.form_data.clone(),
+            secure: self.secure,
         }
     }
 
@@ -107,6 +115,8 @@ pub struct GemonRestRequest {
     headers: HashMap<String, String>,
     body: Option<String>,
     form_data: HashMap<String, String>,
+    #[serde(default)]
+    secure: bool,
 }
 
 impl GemonRestRequest {
@@ -129,6 +139,25 @@ impl GemonRestRequest {
     pub fn form_data(&self) -> &HashMap<String, String> {
         &self.form_data
     }
+
+    pub fn secure(&self) -> bool {
+        self.secure
+    }
+
+    /// Headers as they are sent: secure requests get the project authorization of the
+    /// selected environment unless an authorization header was set explicitly.
+    pub fn resolved_headers(&self) -> HashMap<String, String> {
+        let mut headers = self.headers.clone();
+        let has_authorization = headers
+            .keys()
+            .any(|key| key.trim().eq_ignore_ascii_case(constants::AUTHORIZATION));
+        if self.secure && !has_authorization {
+            if let Some(authorization) = authorization() {
+                headers.insert(constants::AUTHORIZATION.to_string(), authorization);
+            }
+        }
+        headers
+    }
 }
 
 impl GemonRequest for GemonRestRequest {
@@ -145,7 +174,7 @@ impl GemonRequest for GemonRestRequest {
         request = request
             .header(CONTENT_TYPE, constants::DEFAULT_CONTENT_TYPE)
             .header(ACCEPT, constants::DEFAULT_ACCEPT)
-            .headers(self.headers.clone().to_header_map()?);
+            .headers(self.resolved_headers().to_header_map()?);
 
         if !self.form_data.is_empty() {
             request = request.form(&self.form_data);
