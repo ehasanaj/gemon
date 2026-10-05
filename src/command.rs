@@ -3,12 +3,6 @@ use colored::Colorize;
 use crate::EmptyResult;
 
 #[derive(Debug)]
-pub enum Form {
-    Short,
-    Long,
-}
-
-#[derive(Debug)]
 pub enum GemonCommand {
     Invalid,
     Help,
@@ -28,20 +22,20 @@ pub enum GemonCommand {
     File,
     LogResponse,
     AlsoPrintToTerminal,
-    Uri(String, Form),
-    Header(String, Form),
-    Body(String, Form),
-    FormData(String, Form),
-    ResponseFile(String, Form),
-    Save(String, Form),
-    Call(String, Form),
-    SaveAndCall(String, Form),
-    Delete(String, Form),
-    RemoveEnv(String, Form),
-    AddEnv(String, Form),
-    RemoveEnvValue(String, Form),
-    SelectEnv(String, Form),
-    AddAuthorization(String, Form),
+    Uri(String),
+    Header(String),
+    Body(String),
+    FormData(String),
+    ResponseFile(String),
+    Save(String),
+    Call(String),
+    SaveAndCall(String),
+    Delete(String),
+    RemoveEnv(String),
+    AddEnv(String),
+    RemoveEnvValue(String),
+    SelectEnv(String),
+    AddAuthorization(String),
     RemoveAuthorization,
     ImportOpenApi,
     Secure,
@@ -70,38 +64,38 @@ impl From<String> for GemonCommand {
             "-sec" | "--secure" => GemonCommand::Secure,
             "-r-auth" | "--remove-authorization" => GemonCommand::RemoveAuthorization,
             "import-openapi" | "--import-openapi" => GemonCommand::ImportOpenApi,
-            s if s.starts_with("-auth=") => GemonCommand::AddAuthorization(cmd, Form::Short),
+            s if s.starts_with("-auth=") => GemonCommand::AddAuthorization(cmd),
             s if s.starts_with("--authorization=") => {
-                GemonCommand::AddAuthorization(cmd, Form::Long)
+                GemonCommand::AddAuthorization(cmd)
             }
-            s if s.starts_with("-u=") => GemonCommand::Uri(cmd, Form::Short),
-            s if s.starts_with("--uri=") => GemonCommand::Uri(cmd, Form::Long),
-            s if s.starts_with("-h=") => GemonCommand::Header(cmd, Form::Short),
-            s if s.starts_with("--header=") => GemonCommand::Header(cmd, Form::Long),
-            s if s.starts_with("-b=") => GemonCommand::Body(cmd, Form::Short),
-            s if s.starts_with("--body=") => GemonCommand::Body(cmd, Form::Long),
-            s if s.starts_with("-fd=") => GemonCommand::FormData(cmd, Form::Short),
-            s if s.starts_with("--form-data=") => GemonCommand::FormData(cmd, Form::Long),
-            s if s.starts_with("-rf=") => GemonCommand::ResponseFile(cmd, Form::Short),
-            s if s.starts_with("--response-file=") => GemonCommand::ResponseFile(cmd, Form::Long),
-            s if s.starts_with("-s=") => GemonCommand::Save(cmd, Form::Short),
-            s if s.starts_with("--save=") => GemonCommand::Save(cmd, Form::Long),
-            s if s.starts_with("-c=") => GemonCommand::Call(cmd, Form::Short),
-            s if s.starts_with("--call=") => GemonCommand::Call(cmd, Form::Short),
-            s if s.starts_with("-sc=") => GemonCommand::SaveAndCall(cmd, Form::Long),
-            s if s.starts_with("--save-and-call=") => GemonCommand::SaveAndCall(cmd, Form::Long),
-            s if s.starts_with("-d=") => GemonCommand::Delete(cmd, Form::Short),
-            s if s.starts_with("--delete=") => GemonCommand::Delete(cmd, Form::Long),
-            s if s.starts_with("-ed=") => GemonCommand::RemoveEnv(cmd, Form::Short),
-            s if s.starts_with("--env-delete=") => GemonCommand::RemoveEnv(cmd, Form::Long),
-            s if s.starts_with("-e=") => GemonCommand::AddEnv(cmd, Form::Short),
-            s if s.starts_with("--env=") => GemonCommand::AddEnv(cmd, Form::Long),
-            s if s.starts_with("-edv=") => GemonCommand::RemoveEnvValue(cmd, Form::Short),
-            s if s.starts_with("-env-delete-value=") => {
-                GemonCommand::RemoveEnvValue(cmd, Form::Long)
+            s if s.starts_with("-u=") => GemonCommand::Uri(cmd),
+            s if s.starts_with("--uri=") => GemonCommand::Uri(cmd),
+            s if s.starts_with("-h=") => GemonCommand::Header(cmd),
+            s if s.starts_with("--header=") => GemonCommand::Header(cmd),
+            s if s.starts_with("-b=") => GemonCommand::Body(cmd),
+            s if s.starts_with("--body=") => GemonCommand::Body(cmd),
+            s if s.starts_with("-fd=") => GemonCommand::FormData(cmd),
+            s if s.starts_with("--form-data=") => GemonCommand::FormData(cmd),
+            s if s.starts_with("-rf=") => GemonCommand::ResponseFile(cmd),
+            s if s.starts_with("--response-file=") => GemonCommand::ResponseFile(cmd),
+            s if s.starts_with("-s=") => GemonCommand::Save(cmd),
+            s if s.starts_with("--save=") => GemonCommand::Save(cmd),
+            s if s.starts_with("-c=") => GemonCommand::Call(cmd),
+            s if s.starts_with("--call=") => GemonCommand::Call(cmd),
+            s if s.starts_with("-sc=") => GemonCommand::SaveAndCall(cmd),
+            s if s.starts_with("--save-and-call=") => GemonCommand::SaveAndCall(cmd),
+            s if s.starts_with("-d=") => GemonCommand::Delete(cmd),
+            s if s.starts_with("--delete=") => GemonCommand::Delete(cmd),
+            s if s.starts_with("-ed=") => GemonCommand::RemoveEnv(cmd),
+            s if s.starts_with("--env-delete=") => GemonCommand::RemoveEnv(cmd),
+            s if s.starts_with("-e=") => GemonCommand::AddEnv(cmd),
+            s if s.starts_with("--env=") => GemonCommand::AddEnv(cmd),
+            s if s.starts_with("-edv=") => GemonCommand::RemoveEnvValue(cmd),
+            s if s.starts_with("--env-delete-value=") || s.starts_with("-env-delete-value=") => {
+                GemonCommand::RemoveEnvValue(cmd)
             }
-            s if s.starts_with("-se=") => GemonCommand::SelectEnv(cmd, Form::Short),
-            s if s.starts_with("--select-env=") => GemonCommand::SelectEnv(cmd, Form::Long),
+            s if s.starts_with("-se=") => GemonCommand::SelectEnv(cmd),
+            s if s.starts_with("--select-env=") => GemonCommand::SelectEnv(cmd),
             _ => GemonCommand::Invalid,
         }
     }
@@ -170,7 +164,7 @@ impl GemonCommand {
             "Set the body of the request",
         );
         GemonCommand::print_command(
-            "-fd=(key:value) | --form-data=(key:value)",
+            "-fd=(key::value) | --form-data=(key::value)",
             "Set a form data parameter to the request",
         );
         GemonCommand::print_command(
@@ -179,7 +173,7 @@ impl GemonCommand {
         );
         GemonCommand::print_command("-sec | --secure", "Mark request that it needs to be authorized, authorization is either taken from project or from specific header");
         GemonCommand::print_command(
-            "-s | --save",
+            "-s=(login) | --save=(login)",
             "Save request into the project so it can be called later",
         );
         GemonCommand::print_command(

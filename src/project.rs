@@ -12,7 +12,7 @@ use crate::{
     request::{request_builder::RequestBuilder, Request},
     EmptyResult,
 };
-use project_handler::{add_authorization, remove_authorization};
+use project_handler::{add_authorization, remove_authorization, try_get_project};
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt, fs, io::stdin};
 
@@ -25,6 +25,12 @@ pub struct Environment {
 }
 
 impl Environment {
+    fn empty() -> Environment {
+        Environment {
+            values: HashMap::new(),
+        }
+    }
+
     pub fn from(touple: (String, String)) -> Environment {
         let mut values = HashMap::new();
         values.insert(touple.0, touple.1);
@@ -83,10 +89,10 @@ pub struct Project {
 
 impl Project {
     pub fn init_named(name: &str) -> EmptyResult {
-        if get_project().is_some() {
-            return Err(Box::new(ProjectError {
-                message: String::from("Project already exists"),
-            }));
+        match try_get_project() {
+            Ok(None) => {}
+            Ok(Some(_)) => return Err(ProjectError::from("Project already exists")),
+            Err(message) => return Err(ProjectError::from(&message)),
         }
 
         let project = Project {
@@ -148,6 +154,40 @@ impl Project {
         self.authorization.remove_entry(env);
     }
 
+    fn add_env(&mut self, name: &str) -> EmptyResult {
+        if self.environments.contains_key(name) {
+            return Err(ProjectError::from("Environment already exists!"));
+        }
+        self.environments
+            .insert(name.to_string(), Environment::empty());
+        Ok(())
+    }
+
+    fn rename_env(&mut self, old: &str, new: &str) -> EmptyResult {
+        if old == new {
+            return Ok(());
+        }
+        if self.environments.contains_key(new) {
+            return Err(ProjectError::from("Environment already exists!"));
+        }
+        let environment = self
+            .environments
+            .remove(old)
+            .ok_or_else(|| ProjectError::from("Environment does not exist!"))?;
+        self.environments.insert(new.to_string(), environment);
+        if let Some(authorization) = self.authorization.remove(old) {
+            self.authorization.insert(new.to_string(), authorization);
+        }
+        if self.selected_environment.as_deref() == Some(old) {
+            self.selected_environment = Some(new.to_string());
+        }
+        Ok(())
+    }
+
+    fn clear_selected_env(&mut self) {
+        self.selected_environment = None;
+    }
+
     fn set_selected_env(&mut self, env: &String) -> EmptyResult {
         if !self.environments.contains_key(env) {
             return Err(ProjectError::from("Environment does not exist!"));
@@ -196,6 +236,16 @@ impl Project {
         };
         self.authorization.remove_entry(&env);
         Ok(())
+    }
+
+    /// Sets the authorization of `env`, where `NO_ENV` is the default used without environment.
+    fn set_authorization_for(&mut self, env: &str, authorization: &str) {
+        self.authorization
+            .insert(env.to_string(), authorization.to_string());
+    }
+
+    fn remove_authorization_for(&mut self, env: &str) {
+        self.authorization.remove(env);
     }
 
     pub async fn execute(config: &GemonConfig, scenario: &GemonProjectScenario) -> EmptyResult {
