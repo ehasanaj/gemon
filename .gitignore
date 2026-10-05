@@ -5,3 +5,5 @@ post*
 put*
 patch*
 delete*
+/gemon.json
+/openapi.yaml
