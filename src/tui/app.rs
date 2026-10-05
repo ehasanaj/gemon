@@ -1,8 +1,12 @@
-use super::input::TextInput;
+use super::{
+    input::TextInput,
+    layout::{self, contains},
+};
 use crate::{
     config::{effector::Effector, types::GemonMethodType, GemonConfig},
     constants::NO_ENV,
     project::{
+        import_openapi_requests as import_openapi_project_requests,
         project_handler::{
             add_authorization, add_env_value, create_project, delete_request, get_project,
             list_saved_requests, read_saved_rest_request, remove_authorization, remove_env,
@@ -15,7 +19,8 @@ use crate::{
         rest_request::GemonRestRequest,
     },
 };
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Rect;
 use serde_json::Value;
 use std::{collections::HashMap, time::Instant};
 
@@ -61,6 +66,7 @@ impl Tab {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
     SavedRequests,
+    RequestFilter,
     Method,
     Url,
     RequestName,
@@ -427,6 +433,7 @@ pub struct App {
     pub project: ProjectView,
     pub saved_requests: Vec<SavedRequestInfo>,
     pub selected_request: usize,
+    pub request_filter: TextInput,
     pub draft: RequestDraft,
     pub response: Option<ResponseView>,
     pub response_scroll: u16,
@@ -434,6 +441,19 @@ pub struct App {
     pub selected_env_value: usize,
     pub modal: Option<Modal>,
     pub status: StatusLine,
+    pub request_list_width: u16,
+    pub environment_list_width: u16,
+    pub pair_split_percent: u16,
+    pub body_split_percent: u16,
+    drag_target: Option<DragTarget>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DragTarget {
+    RequestListWidth,
+    EnvironmentListWidth,
+    PairSplit,
+    BodySplit,
 }
 
 impl App {
@@ -445,6 +465,7 @@ impl App {
             project: ProjectView::default(),
             saved_requests: Vec::new(),
             selected_request: 0,
+            request_filter: TextInput::single(""),
             draft: RequestDraft::default(),
             response: None,
             response_scroll: 0,
@@ -452,6 +473,11 @@ impl App {
             selected_env_value: 0,
             modal: None,
             status: StatusLine::info("Ready"),
+            request_list_width: 32,
+            environment_list_width: 34,
+            pair_split_percent: 50,
+            body_split_percent: 42,
+            drag_target: None,
         };
 
         app.refresh_workspace();
@@ -507,6 +533,15 @@ impl App {
                 return AppCommand::None;
             }
             KeyCode::Esc => {
+                if self.focus == Focus::RequestFilter {
+                    if self.request_filter.value().is_empty() {
+                        self.focus = Focus::SavedRequests;
+                    } else {
+                        self.request_filter.set_value(String::new());
+                        self.clamp_request_selection();
+                    }
+                    return AppCommand::None;
+                }
                 self.active_tab = self.active_tab.previous();
                 self.align_focus_to_tab();
                 return AppCommand::None;
@@ -516,6 +551,9 @@ impl App {
 
         if let Some(input) = self.active_input_mut() {
             if input.handle_key(key) {
+                if self.focus == Focus::RequestFilter {
+                    self.clamp_request_selection();
+                }
                 return AppCommand::None;
             }
         }
@@ -531,6 +569,224 @@ impl App {
                 }
                 AppCommand::None
             }
+        }
+    }
+
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, area: Rect) -> AppCommand {
+        if self.modal.is_some() {
+            return AppCommand::None;
+        }
+
+        let root = layout::root(area);
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                if !self.start_drag(mouse.column, mouse.row, root) {
+                    self.handle_mouse_click(mouse.column, mouse.row, root);
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                self.update_drag(mouse.column, mouse.row, root);
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                self.drag_target = None;
+            }
+            MouseEventKind::ScrollUp => self.handle_mouse_scroll(mouse.column, mouse.row, -1, root),
+            MouseEventKind::ScrollDown => {
+                self.handle_mouse_scroll(mouse.column, mouse.row, 1, root)
+            }
+            _ => {}
+        }
+
+        AppCommand::None
+    }
+
+    fn start_drag(&mut self, column: u16, row: u16, root: layout::RootLayout) -> bool {
+        match self.active_tab {
+            Tab::Requests => {
+                let requests = layout::requests(
+                    root.body,
+                    self.request_list_width,
+                    self.pair_split_percent,
+                    self.body_split_percent,
+                );
+                if on_vertical_boundary(requests.saved, requests.workspace, column, row) {
+                    self.drag_target = Some(DragTarget::RequestListWidth);
+                    return true;
+                }
+                if on_vertical_boundary(requests.headers, requests.form_data, column, row) {
+                    self.drag_target = Some(DragTarget::PairSplit);
+                    return true;
+                }
+                if on_horizontal_boundary(requests.body, requests.response, column, row) {
+                    self.drag_target = Some(DragTarget::BodySplit);
+                    return true;
+                }
+            }
+            Tab::Environments => {
+                let env = layout::environments(root.body, self.environment_list_width);
+                if on_vertical_boundary(env.list, env.values, column, row) {
+                    self.drag_target = Some(DragTarget::EnvironmentListWidth);
+                    return true;
+                }
+            }
+            Tab::Help => {}
+        }
+
+        false
+    }
+
+    fn update_drag(&mut self, column: u16, row: u16, root: layout::RootLayout) {
+        match self.drag_target {
+            Some(DragTarget::RequestListWidth) => {
+                let width = column.saturating_sub(root.body.x).saturating_add(1);
+                self.request_list_width = layout::clamp_panel_width(width, root.body.width);
+            }
+            Some(DragTarget::EnvironmentListWidth) => {
+                let width = column.saturating_sub(root.body.x).saturating_add(1);
+                self.environment_list_width = layout::clamp_panel_width(width, root.body.width);
+            }
+            Some(DragTarget::PairSplit) => {
+                let requests = layout::requests(
+                    root.body,
+                    self.request_list_width,
+                    self.pair_split_percent,
+                    self.body_split_percent,
+                );
+                self.pair_split_percent =
+                    percent_at(column, requests.pairs.x, requests.pairs.width).clamp(20, 80);
+            }
+            Some(DragTarget::BodySplit) => {
+                let requests = layout::requests(
+                    root.body,
+                    self.request_list_width,
+                    self.pair_split_percent,
+                    self.body_split_percent,
+                );
+                let top = requests.body.y;
+                let height = requests
+                    .body
+                    .height
+                    .saturating_add(requests.response.height)
+                    .max(1);
+                self.body_split_percent = percent_at(row, top, height).clamp(20, 75);
+            }
+            None => {}
+        }
+    }
+
+    fn handle_mouse_click(&mut self, column: u16, row: u16, root: layout::RootLayout) {
+        if contains(root.tabs, column, row) {
+            self.click_header_tab(column, root.tabs);
+            return;
+        }
+
+        match self.active_tab {
+            Tab::Requests => self.handle_request_click(column, row, root.body),
+            Tab::Environments => self.handle_environment_click(column, row, root.body),
+            Tab::Help => {}
+        }
+    }
+
+    fn click_header_tab(&mut self, column: u16, tabs: Rect) {
+        let relative = column.saturating_sub(tabs.x);
+        let tab_width = (tabs.width / 3).max(1);
+        self.active_tab = match (relative / tab_width).min(2) {
+            0 => Tab::Requests,
+            1 => Tab::Environments,
+            _ => Tab::Help,
+        };
+        self.align_focus_to_tab();
+    }
+
+    fn handle_request_click(&mut self, column: u16, row: u16, area: Rect) {
+        let requests = layout::requests(
+            area,
+            self.request_list_width,
+            self.pair_split_percent,
+            self.body_split_percent,
+        );
+
+        if contains(requests.saved_filter, column, row) {
+            self.focus_request(Focus::RequestFilter);
+        } else if contains(requests.saved_list, column, row) {
+            self.focus_request(Focus::SavedRequests);
+            if let Some(index) = list_row_at(requests.saved_list, row) {
+                self.select_visible_request(index);
+            }
+        } else if contains(requests.composer, column, row) {
+            self.focus_request(composer_focus_at(requests.composer, column, row));
+        } else if contains(requests.headers, column, row) {
+            self.focus_request(Focus::Headers);
+            if let Some(index) = table_row_at(requests.headers, row) {
+                self.select_pair_at(true, index);
+            }
+        } else if contains(requests.form_data, column, row) {
+            self.focus_request(Focus::FormData);
+            if let Some(index) = table_row_at(requests.form_data, row) {
+                self.select_pair_at(false, index);
+            }
+        } else if contains(requests.body, column, row) {
+            self.focus_request(Focus::Body);
+        } else if contains(requests.response, column, row) {
+            self.focus_request(Focus::Response);
+        }
+    }
+
+    fn handle_environment_click(&mut self, column: u16, row: u16, area: Rect) {
+        let env = layout::environments(area, self.environment_list_width);
+        if contains(env.list, column, row) {
+            self.focus_environment(Focus::EnvList);
+            if let Some(index) = list_row_at(env.list, row) {
+                self.select_env_at(index);
+            }
+        } else if contains(env.values, column, row) {
+            self.focus_environment(Focus::EnvValues);
+            if let Some(index) = table_row_at(env.values, row) {
+                self.select_env_value_at(index);
+            }
+        }
+    }
+
+    fn handle_mouse_scroll(
+        &mut self,
+        column: u16,
+        row: u16,
+        delta: isize,
+        root: layout::RootLayout,
+    ) {
+        match self.active_tab {
+            Tab::Requests => {
+                let requests = layout::requests(
+                    root.body,
+                    self.request_list_width,
+                    self.pair_split_percent,
+                    self.body_split_percent,
+                );
+                if contains(requests.saved, column, row) {
+                    self.focus_request(Focus::SavedRequests);
+                    self.move_selected_request(delta);
+                } else if contains(requests.headers, column, row) {
+                    self.focus_request(Focus::Headers);
+                    self.move_selected_pair(true, delta);
+                } else if contains(requests.form_data, column, row) {
+                    self.focus_request(Focus::FormData);
+                    self.move_selected_pair(false, delta);
+                } else if contains(requests.response, column, row) {
+                    self.focus_request(Focus::Response);
+                    self.scroll_response(delta);
+                }
+            }
+            Tab::Environments => {
+                let env = layout::environments(root.body, self.environment_list_width);
+                if contains(env.list, column, row) {
+                    self.focus_environment(Focus::EnvList);
+                    self.move_selected_env(delta);
+                } else if contains(env.values, column, row) {
+                    self.focus_environment(Focus::EnvValues);
+                    self.move_selected_env_value(delta);
+                }
+            }
+            Tab::Help => {}
         }
     }
 
@@ -623,6 +879,10 @@ impl App {
             KeyCode::Char('d') if self.active_tab == Tab::Requests => {
                 self.confirm_delete_selected_request()
             }
+            KeyCode::Char('f') if self.active_tab == Tab::Requests => {
+                self.focus_request(Focus::RequestFilter)
+            }
+            KeyCode::Char('o') if self.active_tab == Tab::Requests => self.import_openapi(),
             KeyCode::Char('l') => {
                 self.refresh_workspace();
                 self.set_success("Workspace reloaded");
@@ -638,8 +898,14 @@ impl App {
                 KeyCode::Up => self.move_selected_request(-1),
                 KeyCode::Down => self.move_selected_request(1),
                 KeyCode::Enter => self.load_selected_request(),
+                KeyCode::Char('/') => self.focus = Focus::RequestFilter,
                 KeyCode::Char('n') => self.new_draft(),
                 KeyCode::Char('x') => self.confirm_delete_selected_request(),
+                _ => {}
+            },
+            Focus::RequestFilter => match key.code {
+                KeyCode::Down => self.focus = Focus::SavedRequests,
+                KeyCode::Enter => self.load_selected_request(),
                 _ => {}
             },
             Focus::Method => match key.code {
@@ -709,10 +975,10 @@ impl App {
 
     fn handle_response_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Up => self.response_scroll = self.response_scroll.saturating_sub(1),
-            KeyCode::Down => self.response_scroll = self.response_scroll.saturating_add(1),
-            KeyCode::PageUp => self.response_scroll = self.response_scroll.saturating_sub(10),
-            KeyCode::PageDown => self.response_scroll = self.response_scroll.saturating_add(10),
+            KeyCode::Up => self.scroll_response(-1),
+            KeyCode::Down => self.scroll_response(1),
+            KeyCode::PageUp => self.scroll_response(-10),
+            KeyCode::PageDown => self.scroll_response(10),
             KeyCode::Home => self.response_scroll = 0,
             _ => {}
         }
@@ -881,6 +1147,7 @@ impl App {
 
     fn active_input_mut(&mut self) -> Option<&mut TextInput> {
         match (self.active_tab, self.focus) {
+            (Tab::Requests, Focus::RequestFilter) => Some(&mut self.request_filter),
             (Tab::Requests, Focus::Url) => Some(&mut self.draft.url),
             (Tab::Requests, Focus::RequestName) => Some(&mut self.draft.name),
             (Tab::Requests, Focus::Body) => Some(&mut self.draft.body),
@@ -917,6 +1184,7 @@ impl App {
         match self.active_tab {
             Tab::Requests => &[
                 Focus::SavedRequests,
+                Focus::RequestFilter,
                 Focus::Method,
                 Focus::Url,
                 Focus::RequestName,
@@ -932,10 +1200,67 @@ impl App {
     }
 
     fn move_selected_request(&mut self, delta: isize) {
-        self.selected_request = move_index(self.selected_request, self.saved_requests.len(), delta);
+        let visible = self.filtered_request_indices();
+        if visible.is_empty() {
+            self.selected_request = 0;
+            return;
+        }
+
+        let current = visible
+            .iter()
+            .position(|index| *index == self.selected_request)
+            .unwrap_or_default();
+        let next = move_index(current, visible.len(), delta);
+        self.selected_request = visible[next];
+    }
+
+    pub fn visible_saved_requests(&self) -> Vec<(usize, &SavedRequestInfo)> {
+        self.filtered_request_indices()
+            .into_iter()
+            .filter_map(|index| {
+                self.saved_requests
+                    .get(index)
+                    .map(|request| (index, request))
+            })
+            .collect()
+    }
+
+    pub fn selected_visible_request_position(&self) -> Option<usize> {
+        self.filtered_request_indices()
+            .iter()
+            .position(|index| *index == self.selected_request)
+    }
+
+    fn filtered_request_indices(&self) -> Vec<usize> {
+        let filter = self.request_filter.value().trim().to_ascii_lowercase();
+        self.saved_requests
+            .iter()
+            .enumerate()
+            .filter(|(_, request)| {
+                filter.is_empty()
+                    || request.name.to_ascii_lowercase().contains(&filter)
+                    || request.request_type.to_ascii_lowercase().contains(&filter)
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    fn select_visible_request(&mut self, visible_position: usize) {
+        if let Some(index) = self
+            .filtered_request_indices()
+            .get(visible_position)
+            .copied()
+        {
+            self.selected_request = index;
+        }
     }
 
     fn load_selected_request(&mut self) {
+        if self.selected_visible_request_position().is_none() {
+            self.set_info("No matching saved request selected");
+            return;
+        }
+
         let Some(saved) = self.saved_requests.get(self.selected_request) else {
             self.set_info("No saved request selected");
             return;
@@ -996,6 +1321,11 @@ impl App {
     }
 
     fn confirm_delete_selected_request(&mut self) {
+        if self.selected_visible_request_position().is_none() {
+            self.set_info("No matching saved request selected");
+            return;
+        }
+
         let Some(saved) = self.saved_requests.get(self.selected_request) else {
             self.set_info("No saved request selected");
             return;
@@ -1016,6 +1346,34 @@ impl App {
         }
     }
 
+    fn import_openapi(&mut self) {
+        if !self.ensure_project() {
+            return;
+        }
+
+        match import_openapi_project_requests() {
+            Ok(report) => {
+                self.refresh_workspace();
+                if let Some(name) = report.request_names.first() {
+                    self.request_filter.set_value(String::new());
+                    self.selected_request = self
+                        .saved_requests
+                        .iter()
+                        .position(|request| request.name == *name)
+                        .unwrap_or(self.selected_request);
+                    self.focus = Focus::SavedRequests;
+                }
+
+                if report.requests_imported == 0 {
+                    self.set_info(report.summary());
+                } else {
+                    self.set_success(report.summary());
+                }
+            }
+            Err(err) => self.set_error(err.to_string()),
+        }
+    }
+
     fn move_selected_pair(&mut self, is_header: bool, delta: isize) {
         if is_header {
             self.draft.selected_header =
@@ -1026,6 +1384,16 @@ impl App {
                 self.draft.form_data.len(),
                 delta,
             );
+        }
+    }
+
+    fn select_pair_at(&mut self, is_header: bool, index: usize) {
+        if is_header {
+            if index < self.draft.headers.len() {
+                self.draft.selected_header = index;
+            }
+        } else if index < self.draft.form_data.len() {
+            self.draft.selected_form_data = index;
         }
     }
 
@@ -1124,6 +1492,13 @@ impl App {
         self.selected_env_value = 0;
     }
 
+    fn select_env_at(&mut self, index: usize) {
+        if index < self.project.environments.len() {
+            self.selected_env = index;
+            self.selected_env_value = 0;
+        }
+    }
+
     fn move_selected_env_value(&mut self, delta: isize) {
         let len = self
             .project
@@ -1132,6 +1507,22 @@ impl App {
             .map(|env| env.values.len())
             .unwrap_or_default();
         self.selected_env_value = move_index(self.selected_env_value, len, delta);
+    }
+
+    fn select_env_value_at(&mut self, index: usize) {
+        if index < self.current_env_value_count() {
+            self.selected_env_value = index;
+        }
+    }
+
+    fn scroll_response(&mut self, delta: isize) {
+        if delta.is_negative() {
+            self.response_scroll = self
+                .response_scroll
+                .saturating_sub(delta.unsigned_abs() as u16);
+        } else {
+            self.response_scroll = self.response_scroll.saturating_add(delta as u16);
+        }
     }
 
     fn select_current_env(&mut self) {
@@ -1313,9 +1704,19 @@ impl App {
     }
 
     fn clamp_request_selection(&mut self) {
+        if self.saved_requests.is_empty() {
+            self.selected_request = 0;
+            return;
+        }
+
         self.selected_request = self
             .selected_request
             .min(self.saved_requests.len().saturating_sub(1));
+
+        let visible = self.filtered_request_indices();
+        if !visible.is_empty() && !visible.contains(&self.selected_request) {
+            self.selected_request = visible[0];
+        }
     }
 
     fn clamp_environment_selection(&mut self) {
@@ -1367,6 +1768,61 @@ fn move_index(current: usize, len: usize, delta: isize) -> usize {
     next as usize
 }
 
+fn list_row_at(area: Rect, row: u16) -> Option<usize> {
+    row.checked_sub(area.y.saturating_add(1))
+        .map(usize::from)
+        .filter(|index| *index < area.height.saturating_sub(2) as usize)
+}
+
+fn table_row_at(area: Rect, row: u16) -> Option<usize> {
+    row.checked_sub(area.y.saturating_add(2))
+        .map(usize::from)
+        .filter(|index| *index < area.height.saturating_sub(3) as usize)
+}
+
+fn composer_focus_at(area: Rect, column: u16, row: u16) -> Focus {
+    match row.saturating_sub(area.y.saturating_add(1)) {
+        0 if column < area.x.saturating_add(20) => Focus::Method,
+        0 => Focus::Secure,
+        1 => Focus::Url,
+        2 => Focus::RequestName,
+        _ => Focus::Url,
+    }
+}
+
+fn on_vertical_boundary(left: Rect, right: Rect, column: u16, row: u16) -> bool {
+    let boundary_left = left.x.saturating_add(left.width).saturating_sub(1);
+    let boundary_right = right.x;
+    row >= left.y.min(right.y)
+        && row
+            < left
+                .y
+                .saturating_add(left.height)
+                .max(right.y.saturating_add(right.height))
+        && (column == boundary_left || column == boundary_right)
+}
+
+fn on_horizontal_boundary(top: Rect, bottom: Rect, column: u16, row: u16) -> bool {
+    let boundary_top = top.y.saturating_add(top.height).saturating_sub(1);
+    let boundary_bottom = bottom.y;
+    column >= top.x.min(bottom.x)
+        && column
+            < top
+                .x
+                .saturating_add(top.width)
+                .max(bottom.x.saturating_add(bottom.width))
+        && (row == boundary_top || row == boundary_bottom)
+}
+
+fn percent_at(position: u16, origin: u16, length: u16) -> u16 {
+    if length == 0 {
+        return 50;
+    }
+
+    let relative = position.saturating_sub(origin).min(length);
+    ((u32::from(relative) * 100) / u32::from(length)) as u16
+}
+
 fn format_response_body(bytes: &[u8]) -> String {
     match serde_json::from_slice::<Value>(bytes) {
         Ok(value) => serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string()),
@@ -1376,8 +1832,14 @@ fn format_response_body(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{move_index, App, Focus, Modal, RequestDraft, Tab, TextInput};
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use super::{
+        layout, move_index, App, Focus, Modal, RequestDraft, ResponseView, Tab, TextInput,
+    };
+    use crate::project::project_handler::SavedRequestInfo;
+    use crossterm::event::{
+        KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    };
+    use ratatui::layout::Rect;
 
     fn ctrl_key(character: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(character), KeyModifiers::CONTROL)
@@ -1389,6 +1851,26 @@ mod tests {
 
     fn function_key(number: u8) -> KeyEvent {
         KeyEvent::new(KeyCode::F(number), KeyModifiers::NONE)
+    }
+
+    fn plain_key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn mouse(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    fn saved(name: &str) -> SavedRequestInfo {
+        SavedRequestInfo {
+            name: name.to_string(),
+            request_type: String::from("REST"),
+        }
     }
 
     #[test]
@@ -1403,6 +1885,43 @@ mod tests {
         let draft = RequestDraft::default();
 
         assert!(draft.validate_request().is_err());
+    }
+
+    #[test]
+    fn request_filter_limits_visible_requests_and_selection() {
+        let mut app = App::new();
+        app.modal = None;
+        app.saved_requests = vec![saved("listPets"), saved("createPet"), saved("healthCheck")];
+        app.selected_request = 0;
+
+        app.request_filter.set_value(String::from("create"));
+        app.clamp_request_selection();
+
+        let visible = app.visible_saved_requests();
+        assert_eq!(visible.len(), 1);
+        assert_eq!(visible[0].1.name, "createPet");
+        assert_eq!(app.selected_request, 1);
+
+        app.move_selected_request(1);
+        assert_eq!(app.selected_request, 1);
+    }
+
+    #[test]
+    fn slash_focuses_filter_and_escape_clears_it() {
+        let mut app = App::new();
+        app.modal = None;
+        app.focus = Focus::SavedRequests;
+        app.request_filter.set_value(String::from("pet"));
+
+        app.handle_key(plain_key(KeyCode::Char('/')));
+        assert_eq!(app.focus, Focus::RequestFilter);
+
+        app.handle_key(plain_key(KeyCode::Esc));
+        assert_eq!(app.focus, Focus::RequestFilter);
+        assert!(app.request_filter.value().is_empty());
+
+        app.handle_key(plain_key(KeyCode::Esc));
+        assert_eq!(app.focus, Focus::SavedRequests);
     }
 
     #[test]
@@ -1488,5 +2007,216 @@ mod tests {
         app.handle_key(ctrl_key('c'));
 
         assert!(app.should_quit);
+    }
+
+    #[test]
+    fn mouse_click_selects_visible_saved_request() {
+        let mut app = App::new();
+        app.modal = None;
+        app.saved_requests = vec![saved("first"), saved("second"), saved("third")];
+        let area = Rect::new(0, 0, 100, 40);
+        let root = layout::root(area);
+        let requests = layout::requests(
+            root.body,
+            app.request_list_width,
+            app.pair_split_percent,
+            app.body_split_percent,
+        );
+
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::Down(MouseButton::Left),
+                requests.saved_list.x + 2,
+                requests.saved_list.y + 2,
+            ),
+            area,
+        );
+
+        assert_eq!(app.focus, Focus::SavedRequests);
+        assert_eq!(app.selected_request, 1);
+    }
+
+    #[test]
+    fn mouse_wheel_scrolls_saved_request_list() {
+        let mut app = App::new();
+        app.modal = None;
+        app.saved_requests = vec![saved("first"), saved("second"), saved("third")];
+        app.selected_request = 0;
+        let area = Rect::new(0, 0, 100, 40);
+        let root = layout::root(area);
+        let requests = layout::requests(
+            root.body,
+            app.request_list_width,
+            app.pair_split_percent,
+            app.body_split_percent,
+        );
+
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::ScrollDown,
+                requests.saved_list.x + 2,
+                requests.saved_list.y + 1,
+            ),
+            area,
+        );
+
+        assert_eq!(app.focus, Focus::SavedRequests);
+        assert_eq!(app.selected_request, 1);
+    }
+
+    #[test]
+    fn mouse_click_focuses_composer_url_field() {
+        let mut app = App::new();
+        app.modal = None;
+        let area = Rect::new(0, 0, 100, 40);
+        let root = layout::root(area);
+        let requests = layout::requests(
+            root.body,
+            app.request_list_width,
+            app.pair_split_percent,
+            app.body_split_percent,
+        );
+
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::Down(MouseButton::Left),
+                requests.composer.x + 8,
+                requests.composer.y + 2,
+            ),
+            area,
+        );
+
+        assert_eq!(app.focus, Focus::Url);
+    }
+
+    #[test]
+    fn mouse_click_navigates_header_tabs() {
+        let mut app = App::new();
+        app.modal = None;
+        let area = Rect::new(0, 0, 120, 40);
+        let root = layout::root(area);
+
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::Down(MouseButton::Left),
+                root.tabs.x + (root.tabs.width / 3) + 1,
+                root.tabs.y + 1,
+            ),
+            area,
+        );
+
+        assert_eq!(app.active_tab, Tab::Environments);
+        assert_eq!(app.focus, Focus::EnvList);
+    }
+
+    #[test]
+    fn mouse_wheel_scrolls_response_under_pointer() {
+        let mut app = App::new();
+        app.modal = None;
+        app.response = Some(ResponseView {
+            status: 200,
+            elapsed_ms: 10,
+            size_bytes: 2,
+            headers: Vec::new(),
+            body: String::from("one\ntwo\nthree"),
+        });
+        let area = Rect::new(0, 0, 100, 40);
+        let root = layout::root(area);
+        let requests = layout::requests(
+            root.body,
+            app.request_list_width,
+            app.pair_split_percent,
+            app.body_split_percent,
+        );
+
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::ScrollDown,
+                requests.response.x + 2,
+                requests.response.y + 1,
+            ),
+            area,
+        );
+
+        assert_eq!(app.focus, Focus::Response);
+        assert_eq!(app.response_scroll, 1);
+    }
+
+    #[test]
+    fn mouse_drag_resizes_request_list() {
+        let mut app = App::new();
+        app.modal = None;
+        let area = Rect::new(0, 0, 120, 40);
+        let root = layout::root(area);
+        let requests = layout::requests(
+            root.body,
+            app.request_list_width,
+            app.pair_split_percent,
+            app.body_split_percent,
+        );
+        let original_width = app.request_list_width;
+
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::Down(MouseButton::Left),
+                requests.saved.x + requests.saved.width - 1,
+                requests.saved.y + 4,
+            ),
+            area,
+        );
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::Drag(MouseButton::Left),
+                requests.saved.x + requests.saved.width + 10,
+                requests.saved.y + 4,
+            ),
+            area,
+        );
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::Up(MouseButton::Left),
+                requests.saved.x + requests.saved.width + 10,
+                requests.saved.y + 4,
+            ),
+            area,
+        );
+
+        assert!(app.request_list_width > original_width);
+        assert!(app.drag_target.is_none());
+    }
+
+    #[test]
+    fn mouse_drag_resizes_body_response_split() {
+        let mut app = App::new();
+        app.modal = None;
+        let area = Rect::new(0, 0, 120, 40);
+        let root = layout::root(area);
+        let requests = layout::requests(
+            root.body,
+            app.request_list_width,
+            app.pair_split_percent,
+            app.body_split_percent,
+        );
+        let original_percent = app.body_split_percent;
+        let boundary_row = requests.response.y;
+
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::Down(MouseButton::Left),
+                requests.body.x + 4,
+                boundary_row,
+            ),
+            area,
+        );
+        app.handle_mouse(
+            mouse(
+                MouseEventKind::Drag(MouseButton::Left),
+                requests.body.x + 4,
+                requests.body.y,
+            ),
+            area,
+        );
+
+        assert_ne!(app.body_split_percent, original_percent);
     }
 }

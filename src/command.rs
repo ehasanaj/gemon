@@ -43,6 +43,7 @@ pub enum GemonCommand {
     SelectEnv(String, Form),
     AddAuthorization(String, Form),
     RemoveAuthorization,
+    ImportOpenApi,
     Secure,
 }
 
@@ -68,6 +69,7 @@ impl From<String> for GemonCommand {
             "-p" | "--print" => GemonCommand::AlsoPrintToTerminal,
             "-sec" | "--secure" => GemonCommand::Secure,
             "-r-auth" | "--remove-authorization" => GemonCommand::RemoveAuthorization,
+            "import-openapi" | "--import-openapi" => GemonCommand::ImportOpenApi,
             s if s.starts_with("-auth=") => GemonCommand::AddAuthorization(cmd, Form::Short),
             s if s.starts_with("--authorization=") => {
                 GemonCommand::AddAuthorization(cmd, Form::Long)
@@ -123,6 +125,10 @@ impl GemonCommand {
         GemonCommand::print_command(
             "tui | --tui | -i | --interactive",
             "Open the interactive terminal user interface",
+        );
+        GemonCommand::print_command(
+            "import-openapi | --import-openapi",
+            "Import REST requests from every openapi.yaml file in the project tree",
         );
         GemonCommand::print_command("init", "Initialize current folder into a gemon project");
         GemonCommand::print_command(

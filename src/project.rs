@@ -1,3 +1,4 @@
+pub use self::openapi_import::import_openapi_requests;
 use self::project_handler::{
     add_env_value, delete_request, get_request, get_selected_env, print_all_env,
     print_selected_env, remove_env, remove_env_value, save_request, set_selected_env,
@@ -15,6 +16,7 @@ use project_handler::{add_authorization, remove_authorization};
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, fmt, fs, io::stdin};
 
+mod openapi_import;
 pub mod project_handler;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -225,6 +227,11 @@ impl Project {
             GemonProjectScenario::RemoveAuthorization => remove_authorization(),
             GemonProjectScenario::AddAuthorization(authorization) => {
                 add_authorization(authorization)
+            }
+            GemonProjectScenario::ImportOpenApi => {
+                let report = import_openapi_requests()?;
+                println!("{}", report.summary());
+                Ok(())
             }
         }
     }

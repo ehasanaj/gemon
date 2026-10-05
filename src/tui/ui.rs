@@ -1,6 +1,7 @@
 use super::{
     app::{App, EnvField, Focus, KeyValue, Modal, PairField, RequestDraft, StatusKind, Tab},
     input::TextInput,
+    layout,
 };
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -13,29 +14,22 @@ use ratatui::{
 };
 
 pub fn draw(frame: &mut Frame<'_>, app: &App) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(2),
-        ])
-        .split(frame.area());
+    let root = layout::root(frame.area());
 
-    draw_header(frame, app, chunks[0]);
+    draw_header(frame, app, root);
     match app.active_tab {
-        Tab::Requests => draw_requests(frame, app, chunks[1]),
-        Tab::Environments => draw_environments(frame, app, chunks[1]),
-        Tab::Help => draw_help(frame, chunks[1]),
+        Tab::Requests => draw_requests(frame, app, root.body),
+        Tab::Environments => draw_environments(frame, app, root.body),
+        Tab::Help => draw_help(frame, root.body),
     }
-    draw_footer(frame, app, chunks[2]);
+    draw_footer(frame, app, root.footer);
 
     if let Some(modal) = &app.modal {
         draw_modal(frame, app, modal);
     }
 }
 
-fn draw_header(frame: &mut Frame<'_>, app: &App, area: Rect) {
+fn draw_header(frame: &mut Frame<'_>, app: &App, area: layout::RootLayout) {
     let titles = [Tab::Requests, Tab::Environments, Tab::Help]
         .iter()
         .map(|tab| Line::from(Span::styled(tab.title(), Style::default().fg(Color::White))))
@@ -65,11 +59,6 @@ fn draw_header(frame: &mut Frame<'_>, app: &App, area: Rect) {
         "Default auth: empty"
     };
 
-    let header = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
-        .split(area);
-
     let tabs = Tabs::new(titles)
         .select(selected)
         .block(
@@ -82,7 +71,7 @@ fn draw_header(frame: &mut Frame<'_>, app: &App, area: Rect) {
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         );
-    frame.render_widget(tabs, header[0]);
+    frame.render_widget(tabs, area.tabs);
 
     let context = Paragraph::new(Line::from(vec![
         Span::styled(project, Style::default().fg(Color::White)),
@@ -93,29 +82,38 @@ fn draw_header(frame: &mut Frame<'_>, app: &App, area: Rect) {
     ]))
     .alignment(Alignment::Right)
     .block(Block::default().borders(Borders::ALL));
-    frame.render_widget(context, header[1]);
+    frame.render_widget(context, area.context);
 }
 
 fn draw_requests(frame: &mut Frame<'_>, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(32), Constraint::Min(0)])
-        .split(area);
+    let requests = layout::requests(
+        area,
+        app.request_list_width,
+        app.pair_split_percent,
+        app.body_split_percent,
+    );
 
-    draw_saved_requests(frame, app, chunks[0]);
-    draw_request_workspace(frame, app, chunks[1]);
+    draw_request_filter(frame, app, requests.saved_filter);
+    draw_saved_requests(frame, app, requests.saved_list);
+    draw_request_workspace(frame, app, requests);
 }
 
 fn draw_saved_requests(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    let visible_requests = app.visible_saved_requests();
     let items = if app.saved_requests.is_empty() {
         vec![ListItem::new(Line::from(Span::styled(
             "No saved requests",
             Style::default().fg(Color::DarkGray),
         )))]
+    } else if visible_requests.is_empty() {
+        vec![ListItem::new(Line::from(Span::styled(
+            "No matches",
+            Style::default().fg(Color::DarkGray),
+        )))]
     } else {
-        app.saved_requests
+        visible_requests
             .iter()
-            .map(|request| {
+            .map(|(_, request)| {
                 ListItem::new(Line::from(vec![
                     Span::styled(
                         request.name.clone(),
@@ -134,8 +132,8 @@ fn draw_saved_requests(frame: &mut Frame<'_>, app: &App, area: Rect) {
     };
 
     let mut state = ListState::default();
-    if !app.saved_requests.is_empty() {
-        state.select(Some(app.selected_request));
+    if !visible_requests.is_empty() {
+        state.select(app.selected_visible_request_position());
     }
 
     let list = List::new(items)
@@ -154,30 +152,38 @@ fn draw_saved_requests(frame: &mut Frame<'_>, app: &App, area: Rect) {
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-fn draw_request_workspace(frame: &mut Frame<'_>, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(7),
-            Constraint::Length(9),
-            Constraint::Percentage(42),
-            Constraint::Percentage(58),
-        ])
-        .split(area);
+fn draw_request_filter(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    let focused = app.active_tab == Tab::Requests && app.focus == Focus::RequestFilter;
+    let visible_count = app.visible_saved_requests().len();
+    let total_count = app.saved_requests.len();
+    let value = if app.request_filter.value().is_empty() && !focused {
+        String::from("type / or Ctrl-F")
+    } else {
+        display_single_input(&app.request_filter, focused)
+    };
+    let filter = Paragraph::new(Line::from(vec![
+        Span::styled("Search ", label_style(focused)),
+        Span::styled(value, value_style(focused)),
+        Span::raw("  "),
+        Span::styled(
+            format!("{visible_count}/{total_count}"),
+            Style::default().fg(Color::DarkGray),
+        ),
+    ]))
+    .block(focused_block("Request Filter  /  Ctrl-F", focused));
+    frame.render_widget(filter, area);
+}
 
-    draw_composer(frame, app, chunks[0]);
+fn draw_request_workspace(frame: &mut Frame<'_>, app: &App, requests: layout::RequestsLayout) {
+    draw_composer(frame, app, requests.composer);
 
-    let pairs = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(chunks[1]);
     draw_pair_table(
         frame,
         "Headers  Ctrl-5",
         &app.draft.headers,
         app.draft.selected_header,
         app.focus == Focus::Headers,
-        pairs[0],
+        requests.headers,
     );
     draw_pair_table(
         frame,
@@ -185,11 +191,11 @@ fn draw_request_workspace(frame: &mut Frame<'_>, app: &App, area: Rect) {
         &app.draft.form_data,
         app.draft.selected_form_data,
         app.focus == Focus::FormData,
-        pairs[1],
+        requests.form_data,
     );
 
-    draw_body(frame, &app.draft, app.focus == Focus::Body, chunks[2]);
-    draw_response(frame, app, chunks[3]);
+    draw_body(frame, &app.draft, app.focus == Focus::Body, requests.body);
+    draw_response(frame, app, requests.response);
 }
 
 fn draw_composer(frame: &mut Frame<'_>, app: &App, area: Rect) {
@@ -349,13 +355,10 @@ fn draw_response(frame: &mut Frame<'_>, app: &App, area: Rect) {
 }
 
 fn draw_environments(frame: &mut Frame<'_>, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(34), Constraint::Min(0)])
-        .split(area);
+    let env = layout::environments(area, app.environment_list_width);
 
-    draw_env_list(frame, app, chunks[0]);
-    draw_env_values(frame, app, chunks[1]);
+    draw_env_list(frame, app, env.list);
+    draw_env_values(frame, app, env.values);
 }
 
 fn draw_env_list(frame: &mut Frame<'_>, app: &App, area: Rect) {
@@ -438,12 +441,14 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect) {
         Line::from("F1 requests | F2 environments | F3 help | Tab next field | Shift-Tab previous field"),
         Line::from("Direct focus: Ctrl-1 saved | Ctrl-2 composer | Ctrl-5 headers | Ctrl-6 form data"),
         Line::from("Direct focus: Ctrl-7 body | Ctrl-8 response | Ctrl-9 environments | Ctrl-0 env values"),
+        Line::from("Mouse: click to focus/select | wheel scrolls lists and response | drag borders to resize"),
         Line::from(""),
         Line::from(Span::styled(
             "Requests",
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         )),
-        Line::from("Ctrl-R send | Ctrl-S save | Ctrl-N new draft | Ctrl-D delete saved request"),
+        Line::from("Ctrl-R send | Ctrl-S save | Ctrl-N new draft | Ctrl-O import OpenAPI"),
+        Line::from("Ctrl-F or / filters saved requests | Ctrl-D delete saved request | Ctrl-L reload workspace"),
         Line::from("Saved list: Enter load | Method/Secure: Enter or Space changes value"),
         Line::from("Headers/Form Data: a add | e or Enter edit | x remove"),
         Line::from("Response: Up/Down/PageUp/PageDown scroll"),
@@ -455,7 +460,7 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect) {
         Line::from("Enter selects environment | a adds value | e edits value | x removes | u sets authorization"),
         Line::from("Environment placeholders such as {base_uri} are applied when requests run."),
         Line::from(""),
-        Line::from("Ctrl-L reload workspace | Ctrl-C or Ctrl-Q quit | Esc backs up a tab or closes a modal"),
+        Line::from("Ctrl-C or Ctrl-Q quit | Esc backs up a tab or closes a modal"),
     ];
 
     let paragraph = Paragraph::new(help)
@@ -481,6 +486,10 @@ fn draw_footer(frame: &mut Frame<'_>, app: &App, area: Rect) {
             Span::raw(" send  "),
             Span::styled("Ctrl-S", Style::default().fg(Color::Cyan)),
             Span::raw(" save  "),
+            Span::styled("Ctrl-F", Style::default().fg(Color::Cyan)),
+            Span::raw(" filter  "),
+            Span::styled("Ctrl-O", Style::default().fg(Color::Cyan)),
+            Span::raw(" import  "),
             Span::styled("Ctrl-L", Style::default().fg(Color::Cyan)),
             Span::raw(" reload  "),
             Span::styled("Ctrl-C/Q", Style::default().fg(Color::Cyan)),

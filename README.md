@@ -35,6 +35,7 @@ Gemon supports various commands and options for making API requests, managing en
 -h | --help : Print the list of command options in the terminal.
 -v | --version : Print Gemon version information.
 tui | --tui | -i | --interactive : Open the interactive terminal user interface.
+import-openapi | --import-openapi : Import REST requests from openapi.yaml files in this project.
 ```
 
 ### Interactive TUI
@@ -55,11 +56,25 @@ Useful shortcuts:
 F1 requests       F2 environments     F3 help
 Tab next field    Shift-Tab previous  Ctrl-C/Ctrl-Q quit
 Ctrl-R send       Ctrl-S save         Ctrl-N new request
-Ctrl-D delete     Ctrl-L reload
+Ctrl-O import     Ctrl-D delete       Ctrl-L reload
+Ctrl-F filter     / filter            Mouse select/scroll/resize
 Ctrl-1 saved      Ctrl-2 composer     Ctrl-5 headers
 Ctrl-6 form data  Ctrl-7 body         Ctrl-8 response
 Ctrl-9 env list   Ctrl-0 env values
 ```
+
+### OpenAPI Import
+
+Import REST requests from OpenAPI documentation saved as `openapi.yaml` in the project root or
+any child directory:
+
+```sh
+gemon import-openapi
+```
+
+The importer scans the project tree recursively, converts supported OpenAPI path operations into
+saved REST requests, and uses the first server URL from the specification. If no server URL is
+defined, imported URLs use `{base_uri}` so existing Gemon environments can provide the host.
 
 ### Project Initialization
 

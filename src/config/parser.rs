@@ -52,6 +52,9 @@ impl GemonArgumentParser for String {
             GemonCommand::Help => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Help)),
             GemonCommand::Version => Some(GemonArgument::MiscScenario(MiscScenario::Version)),
             GemonCommand::Init => Some(GemonArgument::ProjectSetup(GemonProjectScenario::Init)),
+            GemonCommand::ImportOpenApi => Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::ImportOpenApi,
+            )),
             GemonCommand::PrintEnvAll => Some(GemonArgument::ProjectSetup(
                 GemonProjectScenario::PrintEnvAll,
             )),
@@ -184,5 +187,23 @@ impl GemonArgumentParser for String {
             )),
             GemonCommand::Secure => Some(GemonArgument::Secure),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GemonArgumentParser;
+    use crate::config::{arguments::GemonArgument, types::GemonProjectScenario};
+
+    #[test]
+    fn parses_openapi_import_command() {
+        let argument = String::from("import-openapi").parse_argument();
+
+        assert!(matches!(
+            argument,
+            Some(GemonArgument::ProjectSetup(
+                GemonProjectScenario::ImportOpenApi
+            ))
+        ));
     }
 }

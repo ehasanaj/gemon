@@ -2,8 +2,8 @@ use crate::EmptyResult;
 use app::{App, AppCommand};
 use crossterm::{
     event::{
-        self, Event, KeyEventKind, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
-        PushKeyboardEnhancementFlags,
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind,
+        KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -17,6 +17,7 @@ use std::{
 
 mod app;
 mod input;
+mod layout;
 mod ui;
 
 pub async fn run() -> EmptyResult {
@@ -31,13 +32,20 @@ pub async fn run() -> EmptyResult {
         }
 
         if event::poll(Duration::from_millis(150))? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    match app.handle_key(key) {
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => match app.handle_key(key) {
+                    AppCommand::None => {}
+                    AppCommand::SendRequest => app.send_request().await,
+                },
+                Event::Mouse(mouse) => {
+                    let area = terminal.area()?;
+                    match app.handle_mouse(mouse, area) {
                         AppCommand::None => {}
                         AppCommand::SendRequest => app.send_request().await,
                     }
                 }
+                Event::Resize(_, _) => {}
+                _ => {}
             }
         }
     }
@@ -54,7 +62,7 @@ impl TerminalSession {
     fn new() -> Result<TerminalSession, Box<dyn Error>> {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen)?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let keyboard_enhancement_enabled = execute!(
             stdout,
             PushKeyboardEnhancementFlags(
@@ -78,6 +86,11 @@ impl TerminalSession {
         self.terminal.draw(|frame| ui::draw(frame, app))?;
         Ok(())
     }
+
+    fn area(&self) -> Result<ratatui::layout::Rect, Box<dyn Error>> {
+        let size = self.terminal.size()?;
+        Ok(ratatui::layout::Rect::new(0, 0, size.width, size.height))
+    }
 }
 
 impl Drop for TerminalSession {
@@ -86,7 +99,11 @@ impl Drop for TerminalSession {
         if self.keyboard_enhancement_enabled {
             let _ = execute!(self.terminal.backend_mut(), PopKeyboardEnhancementFlags);
         }
-        let _ = execute!(self.terminal.backend_mut(), LeaveAlternateScreen);
+        let _ = execute!(
+            self.terminal.backend_mut(),
+            DisableMouseCapture,
+            LeaveAlternateScreen
+        );
         let _ = self.terminal.show_cursor();
     }
 }

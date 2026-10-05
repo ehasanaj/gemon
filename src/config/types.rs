@@ -24,6 +24,7 @@ pub enum GemonProjectScenario {
     SelectEnv(String),
     RemoveAuthorization,
     AddAuthorization(String),
+    ImportOpenApi,
     Help,
 }
 

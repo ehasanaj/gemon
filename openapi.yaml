@@ -1,0 +1,4204 @@
+openapi: 3.0.3
+info:
+  title: Rerune Server API
+  version: "1.0.0"
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Auth
+  - name: Password Reset
+  - name: Newsletter
+  - name: Organisation
+  - name: Project
+  - name: Project Preferences
+  - name: Translation
+  - name: Profile
+  - name: Dictionary
+  - name: Metadata
+  - name: CLI
+  - name: Codec
+  - name: Integrations
+  - name: Billing Accounts
+  - name: Resources
+  - name: Plans
+  - name: DeepL
+  - name: OpenRouter
+  - name: AI Settings
+  - name: Statistics
+  - name: SDK
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: Rate limited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register
+      description: Rate limited. `selected_plan_id` is read from the query string.
+      parameters:
+        - name: selected_plan_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh token
+      description: Rate limited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/{id}/verify-email:
+    put:
+      tags: [Auth]
+      summary: Verify email
+      description: Rate limited.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "200":
+          description: Verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutOrResultResponse"
+        "400":
+          description: Invalid verification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /forgot-password/:
+    post:
+      tags: [Password Reset]
+      summary: Request password reset
+      description: Rate limited. Returns 202 even if the email does not exist.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestResetPayload"
+      responses:
+        "202":
+          description: Accepted
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /forgot-password/reset:
+    post:
+      tags: [Password Reset]
+      summary: Complete password reset
+      description: Rate limited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteResetPayload"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Invalid reset token or payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /newsletter/:
+    post:
+      tags: [Newsletter]
+      summary: Subscribe email to newsletter
+      description: Accepts a JSON body for privacy-safe submissions. Query parameter support remains for backwards compatibility.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewsletterSubscribeRequest"
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Invalid email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /organisation/:
+    post:
+      tags: [Organisation]
+      summary: Create organisation
+      description: Requires user role. Caller must be an active owner of the provided billing account. Creation allocates an organisation resource and returns `409` when capacity is exhausted.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganisationRequest"
+            example:
+              name: Engineering
+              billing_account_id: 64b2f6b76f9c2a9f2d4f4d10
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organisation"
+        "400":
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Caller is not an active owner of the billing account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Capacity exhausted or active assignment conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: MongoDB transactions are unavailable in the current environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      tags: [Organisation]
+      summary: List organisations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Organisation"
+
+  /organisation/{id}:
+    get:
+      tags: [Organisation]
+      summary: Get organisation by ID
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organisation"
+    put:
+      tags: [Organisation]
+      summary: Update organisation
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Organisation"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organisation"
+    delete:
+      tags: [Organisation]
+      summary: Delete organisation
+      description: Deletes an organisation and releases its active organisation assignment. Returns `409` when the organisation still has projects.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: Organisation still has projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Only the organisation owner can delete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Organisation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: MongoDB transactions are unavailable in the current environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /organisation/{id}/invite:
+    post:
+      tags: [Organisation]
+      summary: Invite user to organisation
+      description: Requires owner/member access. Invite reserves or reuses a seat from the organisation billing account and returns `409` when seat capacity is exhausted.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Invalid invitation request (including inviting the owner)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Caller is not authorised to invite users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Organisation or invited user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Seat capacity exhausted, duplicate pending invite, or organisation billing account not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: MongoDB transactions are unavailable in the current environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /organisation/{id}/accept-invitation/{user_id}/code/{invitation_code}:
+    post:
+      tags: [Organisation]
+      summary: Accept organisation invitation
+      description: Accepts invitation only when an active seat assignment exists for the same billing account.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invitation_code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Invalid invitation request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated user does not match invitation target
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Organisation or user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Active seat assignment is required or organisation billing account is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /organisation/{id}/remove-user:
+    delete:
+      tags: [Organisation]
+      summary: Remove user from organisation
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /project/:
+    post:
+      tags: [Project]
+      summary: Create project
+      description: Requires user role and membership/ownership in the target organisation. Billing account is derived from organisation.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+            example:
+              organisation_id: "65f1f77bcf86cd7994390222"
+              name: Mobile App
+              notes: Release train project
+              description: Main mobile localization project
+              guidelines: Keep tone friendly and concise.
+              type: organisation
+              languages:
+                - code: en
+                  name: English
+                  main: true
+                  version: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+              example:
+                id: "65f1f77bcf86cd7994390111"
+                organisation_id: "65f1f77bcf86cd7994390222"
+                name: Mobile App
+                notes: Release train project
+                description: Main mobile localization project
+                guidelines: Keep tone friendly and concise.
+                type: organisation
+                owner:
+                  id: user-1
+                  first_name: Ada
+                  last_name: Lovelace
+                  email: ada@example.com
+                users:
+                  - id: user-1
+                    first_name: Ada
+                    last_name: Lovelace
+                    email: ada@example.com
+                languages:
+                  - code: en
+                    name: English
+                    main: true
+                    version: 1
+                ota_published_ids: []
+                version: 1
+        "400":
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Caller is not authorised for the target organisation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Organisation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Organisation billing account is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /project/organisation/{organisation_id}:
+    get:
+      tags: [Project]
+      summary: List projects by organisation
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: organisation_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+              example:
+                - id: "65f1f77bcf86cd7994390111"
+                  organisation_id: "65f1f77bcf86cd7994390222"
+                  name: Mobile App
+                  notes: Release train project
+                  description: Main mobile localization project
+                  guidelines: Keep tone friendly and concise.
+                  type: organisation
+                  owner:
+                    id: user-1
+                    first_name: Ada
+                    last_name: Lovelace
+                    email: ada@example.com
+                  users:
+                    - id: user-1
+                      first_name: Ada
+                      last_name: Lovelace
+                      email: ada@example.com
+                  languages:
+                    - code: en
+                      name: English
+                      main: true
+                      version: 8
+                    - code: de
+                      name: German
+                      main: false
+                      version: 6
+                  ota_published_ids:
+                    - id: "65f1f77bcf86cd7994390aa"
+                      value: "****"
+                      expires_at: "2026-12-31T23:59:59Z"
+                    - id: "65f1f77bcf86cd7994390ab"
+                      value: "****"
+                  version: 12
+
+  /project/{id}:
+    get:
+      tags: [Project]
+      summary: Get project by ID
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+              example:
+                id: "65f1f77bcf86cd7994390111"
+                organisation_id: "65f1f77bcf86cd7994390222"
+                name: Mobile App
+                notes: Updated release notes
+                description: Main mobile localization project
+                guidelines: Keep tone friendly and concise.
+                type: organisation
+                owner:
+                  id: user-1
+                  first_name: Ada
+                  last_name: Lovelace
+                  email: ada@example.com
+                users:
+                  - id: user-1
+                    first_name: Ada
+                    last_name: Lovelace
+                    email: ada@example.com
+                languages:
+                  - code: en
+                    name: English
+                    main: true
+                    version: 9
+                  - code: de
+                    name: German
+                    main: false
+                    version: 7
+                ota_published_ids:
+                  - id: "65f1f77bcf86cd7994390aa"
+                    value: "****"
+                    expires_at: "2026-12-31T23:59:59Z"
+                version: 13
+    put:
+      tags: [Project]
+      summary: Update project
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+              example:
+                id: "65f1f77bcf86cd7994390111"
+                organisation_id: "65f1f77bcf86cd7994390222"
+                name: Mobile App
+                notes: Updated release notes
+                description: Main mobile localization project
+                guidelines: Keep tone friendly and concise.
+                type: organisation
+                owner:
+                  id: user-1
+                  first_name: Ada
+                  last_name: Lovelace
+                  email: ada@example.com
+                users:
+                  - id: user-1
+                    first_name: Ada
+                    last_name: Lovelace
+                    email: ada@example.com
+                languages:
+                  - code: en
+                    name: English
+                    main: true
+                    version: 9
+                  - code: de
+                    name: German
+                    main: false
+                    version: 7
+                ota_published_ids:
+                  - id: "65f1f77bcf86cd7994390aa"
+                    value: "****"
+                    expires_at: "2026-12-31T23:59:59Z"
+                version: 13
+    delete:
+      tags: [Project]
+      summary: Delete project
+      description: Deletes project and releases active project assignment.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "409":
+          description: Active assignment conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /project/{id}/ota-published-id:
+    post:
+      tags: [Project]
+      summary: Create OTA publish ID for project
+      description: Returns the generated OTA publish ID value once at creation time.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOTAPublishedIDRequest"
+            examples:
+              nonExpiring:
+                summary: Create non-expiring OTA key
+                value: {}
+              withExpiry:
+                summary: Create OTA key with expiry
+                value:
+                  expires_at: "2026-12-31T23:59:59Z"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOTAPublishedIDResponse"
+              example:
+                id: "65f1f77bcf86cd7994390aa"
+                value: "ota_publish_live_01j9q4m4f6q6phx9tx2awzv2vp"
+                expires_at: "2026-12-31T23:59:59Z"
+        "400":
+          description: Invalid project ID or request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                message: invalid project ID
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                message: project not found
+        "409":
+          description: OTA publish ID conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                message: OTA publish ID already exists
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /project/{id}/ota-published-id/{ota_id}:
+    delete:
+      tags: [Project]
+      summary: Delete OTA publish ID for project
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: ota_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Invalid project ID or OTA publish ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                message: invalid OTA publish ID
+        "404":
+          description: OTA publish ID not found for project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                message: OTA publish ID not found for this project
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /project/{id}/invite:
+    post:
+      tags: [Project]
+      summary: Invite user to project
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "200":
+          description: OK
+
+  /project/{id}/accept-invitation/{user_id}:
+    post:
+      tags: [Project]
+      summary: Accept project invitation
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /project/{projectId}/preferences/me:
+    get:
+      tags: [Project Preferences]
+      summary: Get my project preference
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectUserPreference"
+
+  /project/{projectId}/preferences/:
+    post:
+      tags: [Project Preferences]
+      summary: Create project preference
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectPreferenceRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectUserPreference"
+    put:
+      tags: [Project Preferences]
+      summary: Update project preference
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectPreferenceRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectUserPreference"
+    delete:
+      tags: [Project Preferences]
+      summary: Delete project preference
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+    get:
+      tags: [Project Preferences]
+      summary: List project preferences
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectUserPreference"
+
+  /translation/:
+    post:
+      tags: [Translation]
+      summary: Create translation key
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranslationKey"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /translation/project/{id}:
+    get:
+      tags: [Translation]
+      summary: List translation keys by project
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+        - name: sort_direction
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranslationKey"
+
+  /translation/{id}:
+    get:
+      tags: [Translation]
+      summary: Get translation key by ID
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+    delete:
+      tags: [Translation]
+      summary: Delete translation key
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /translation/{id}/value:
+    put:
+      tags: [Translation]
+      summary: Save translation value
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranslationValue"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /translation/{id}/placeholder:
+    put:
+      tags: [Translation]
+      summary: Save placeholder
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Placeholder"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /translation/{id}/placeholder-description:
+    put:
+      tags: [Translation]
+      summary: Save placeholder description
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaceholderDescription"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /translation/{id}/metadata:
+    put:
+      tags: [Translation]
+      summary: Save key metadata
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyMetadata"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /translation/{id}/enable:
+    put:
+      tags: [Translation]
+      summary: Enable/disable translation key
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: enabled
+          in: query
+          required: true
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+
+  /translation/{id}/placeholder/{placeholderId}:
+    delete:
+      tags: [Translation]
+      summary: Delete placeholder
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: placeholderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /profile/:
+    get:
+      tags: [Profile]
+      summary: Get profile
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      tags: [Profile]
+      summary: Update profile
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /profile/delete:
+    delete:
+      tags: [Profile]
+      summary: Delete user
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+
+  /profile/selected-organisation:
+    put:
+      tags: [Profile]
+      summary: Set selected organisation
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelectedOrganisationRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /profile/latest-project:
+    put:
+      tags: [Profile]
+      summary: Add latest project
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /profile/api-key:
+    put:
+      tags: [Profile]
+      summary: Add API key
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyCreateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKey"
+
+  /profile/api-key/{id}:
+    delete:
+      tags: [Profile]
+      summary: Delete API key
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /dictionary/:
+    post:
+      tags: [Dictionary]
+      summary: Create dictionary entry
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dictionary"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dictionary"
+    put:
+      tags: [Dictionary]
+      summary: Update dictionary entry
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Dictionary"
+      responses:
+        "200":
+          description: OK
+
+  /dictionary/project/{id}:
+    get:
+      tags: [Dictionary]
+      summary: List dictionary entries by project
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Dictionary"
+
+  /dictionary/{id}:
+    get:
+      tags: [Dictionary]
+      summary: Get dictionary entry by ID
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dictionary"
+    delete:
+      tags: [Dictionary]
+      summary: Delete dictionary entry
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /metadata/platforms:
+    get:
+      tags: [Metadata]
+      summary: List platforms
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Platform"
+
+  /metadata/cli-version:
+    get:
+      tags: [Metadata]
+      summary: Get latest CLI version
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CliVersion"
+
+  /cli/projects:
+    get:
+      tags: [CLI]
+      summary: List all projects for CLI
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+
+  /codec/import/{project_id}/{lang}/{platform}:
+    post:
+      tags: [Codec]
+      summary: Import translations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lang
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/CodecImportRequest"
+      responses:
+        "200":
+          description: OK
+
+  /codec/export/{project_id}/{lang}/{platform}:
+    get:
+      tags: [Codec]
+      summary: Export translations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lang
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResponse"
+
+  /integrations/:
+    get:
+      tags: [Integrations]
+      summary: List integrations
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Integration"
+
+  /integrations/integration-config:
+    post:
+      tags: [Integrations]
+      summary: Add integration config
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationConfig"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationConfig"
+    put:
+      tags: [Integrations]
+      summary: Update integration config
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationConfig"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntegrationConfig"
+
+  /integrations/protected/:
+    get:
+      tags: [Integrations]
+      summary: List integrations (super_admin)
+      description: Requires super_admin role.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Integration"
+    post:
+      tags: [Integrations]
+      summary: Create integration (super_admin)
+      description: Requires super_admin role.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Integration"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Integration"
+
+  /integrations/protected/{id}:
+    put:
+      tags: [Integrations]
+      summary: Update integration (super_admin)
+      description: Requires super_admin role.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Integration"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Integration"
+
+  /billing/webhooks/stripe:
+    post:
+      tags: [Billing Accounts]
+      summary: Handle Stripe webhook
+      description: Public endpoint. Rate limited. Verifies the Stripe signature against the raw request body and processes supported Stripe events.
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Stripe webhook signature header.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            example:
+              id: evt_1P0000000000000000000000
+              object: event
+              type: checkout.session.completed
+              data:
+                object:
+                  id: cs_test_0000000000000000000000
+                  object: checkout.session
+      responses:
+        "200":
+          description: Event accepted, already processed, or skipped.
+        "400":
+          description: Failed to read body or invalid webhook signature.
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: Failed to process webhook event.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /billing-account/public/plans:
+    get:
+      tags: [Plans]
+      summary: List published plans
+      description: Public endpoint. Rate limited.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+
+  /billing-account/:
+    get:
+      tags: [Billing Accounts]
+      summary: List billing accounts for current owner
+      description: Requires user role. Returns billing accounts owned by authenticated user.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BillingAccount"
+        "404":
+          description: Authenticated user was not found in request context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Billing Accounts]
+      summary: Create billing account
+      description: Requires user role. `plan_id` is read from the query string. Paid plans return a Stripe checkout URL when checkout is required.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: plan_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBillingAccountRequest"
+            example:
+              name: Team Billing
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutOrResultResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing-account/{id}:
+    get:
+      tags: [Billing Accounts]
+      summary: Get billing account by ID
+      description: Requires user role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingAccount"
+        "400":
+          description: Invalid billing account ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Billing account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Billing Accounts]
+      summary: Delete billing account
+      description: Requires user role and billing account ownership. Billing accounts with organisations cannot be deleted.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Invalid billing account ID or billing account has organisations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Only the billing account owner can delete this billing account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Billing account or authenticated user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing-account/{id}/portal-session:
+    get:
+      tags: [Billing Accounts]
+      summary: Create Stripe customer portal session
+      description: Requires user role and billing account ownership.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalSessionResponse"
+        "400":
+          description: Invalid billing account, free plan, or no Stripe customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Caller is not billing account owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing-account/{id}/plan/{plan_id}:
+    post:
+      tags: [Billing Accounts]
+      summary: Set billing account plan
+      description: Requires user role. Free plans are applied immediately. Paid plans create a pending entitlement change and return a Stripe checkout URL.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Billing account ID
+          schema:
+            type: string
+        - name: plan_id
+          in: path
+          required: true
+          description: Plan ID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutOrResultResponse"
+              examples:
+                paid_plan:
+                  summary: Paid plan requires checkout
+                  value:
+                    plan:
+                      id: 64b2f6b76f9c2a9f2d4f4d12
+                      name: Starter
+                      description: Starter plan
+                      is_free: false
+                      is_published: true
+                      internal: false
+                      is_trial_eligible: true
+                      trial_days: 14
+                      is_configurator_template: false
+                      resources:
+                        - resource:
+                            id: 64b2f6b76f9c2a9f2d4f4d11
+                            name: Translation keys
+                            Type: translation_keys
+                            step: 1000
+                            is_published: true
+                          amount: 5
+                          BillingPeriod: monthly
+                          stripe_product:
+                            product_id: prod_123
+                            item_id: price_123
+                            monthly_price_id: price_123
+                            annual_price_id: price_123
+                      base_fee:
+                        Value: 1000
+                        Currencty: EUR
+                      discount_yearly: 10
+                      discount_monthly: 0
+                      billing_period: monthly
+                      stripe_product:
+                        product_id: prod_123
+                        item_id: price_123
+                        monthly_price_id: price_123
+                        annual_price_id: price_123
+                    needs_checkout: true
+                    checkout_url: https://checkout.stripe.com/c/session_123
+                free_plan:
+                  summary: Free plan applied immediately
+                  value:
+                    plan:
+                      id: 64b2f6b76f9c2a9f2d4f4d13
+                      name: Free
+                      description: Free plan
+                      is_free: true
+                      is_published: true
+                      internal: false
+                      is_trial_eligible: false
+                      trial_days: 0
+                      is_configurator_template: false
+                      resources: []
+                      base_fee:
+                        Value: 0
+                        Currencty: EUR
+                      discount_yearly: 0
+                      discount_monthly: 0
+                      billing_period: monthly
+                    needs_checkout: false
+                    checkout_url: ""
+        "400":
+          description: Invalid billing account ID or missing Stripe product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Billing account, plan, or authenticated user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Pending entitlement change already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing-account/{id}/addons:
+    post:
+      tags: [Billing Accounts]
+      summary: Set billing account addons
+      description: Requires user role. Creates a pending addon entitlement change and returns a Stripe checkout URL.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Billing account ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: "#/components/schemas/ResourceEmbedd"
+            example:
+              - resource:
+                  id: 64b2f6b76f9c2a9f2d4f4d11
+                  name: Translation keys
+                  Type: translation_keys
+                  price:
+                    Value: 1000
+                    Currencty: EUR
+                  step: 1000
+                  is_published: true
+                amount: 2
+                BillingPeriod: monthly
+                stripe_product:
+                  product_id: prod_456
+                  item_id: price_456
+                  monthly_price_id: price_456
+                  annual_price_id: price_456
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutOrResultResponse"
+              example:
+                resources:
+                  - resource:
+                      id: 64b2f6b76f9c2a9f2d4f4d11
+                      name: Translation keys
+                      Type: translation_keys
+                      price:
+                        Value: 1000
+                        Currencty: EUR
+                      step: 1000
+                      is_published: true
+                    amount: 2
+                    BillingPeriod: monthly
+                    stripe_product:
+                      product_id: prod_456
+                      item_id: price_456
+                      monthly_price_id: price_456
+                      annual_price_id: price_456
+                needs_checkout: true
+                checkout_url: https://checkout.stripe.com/c/session_123
+        "400":
+          description: Invalid billing account ID, invalid JSON, or empty resources array
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Billing account or authenticated user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Pending entitlement change already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Billing Accounts]
+      summary: Remove billing account addons
+      description: Requires user role. Creates a pending addon removal entitlement change and returns a Stripe checkout URL.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Billing account ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              items:
+                $ref: "#/components/schemas/ResourceEmbedd"
+            example:
+              - resource:
+                  id: 64b2f6b76f9c2a9f2d4f4d11
+                  name: Translation keys
+                  Type: translation_keys
+                  price:
+                    Value: 1000
+                    Currencty: EUR
+                  step: 1000
+                  is_published: true
+                amount: 1
+                BillingPeriod: monthly
+                stripe_product:
+                  product_id: prod_456
+                  item_id: price_456
+                  monthly_price_id: price_456
+                  annual_price_id: price_456
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutOrResultResponse"
+              example:
+                resources:
+                  - resource:
+                      id: 64b2f6b76f9c2a9f2d4f4d11
+                      name: Translation keys
+                      Type: translation_keys
+                      price:
+                        Value: 1000
+                        Currencty: EUR
+                      step: 1000
+                      is_published: true
+                    amount: 1
+                    BillingPeriod: monthly
+                    stripe_product:
+                      product_id: prod_456
+                      item_id: price_456
+                      monthly_price_id: price_456
+                      annual_price_id: price_456
+                needs_checkout: true
+                checkout_url: https://checkout.stripe.com/c/session_123
+        "400":
+          description: Invalid billing account ID, invalid JSON, invalid resources, no active plan, free billing account, missing Stripe customer, or missing Stripe product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: User is not the owner of the billing account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Billing account or authenticated user not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Pending entitlement change already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing-account/resources:
+    get:
+      tags: [Resources]
+      summary: List published resources
+      description: Requires user role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Resource"
+
+  /billing-account/plans:
+    get:
+      tags: [Plans]
+      summary: List published plans
+      description: Requires user role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+
+  /billing-account/admin/resource:
+    post:
+      tags: [Resources]
+      summary: Create resource
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Resource"
+            example:
+              name: Translation keys
+              Type: translation_keys
+              step: 1000
+              price:
+                Value: 1000
+                Currencty: EUR
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resource"
+
+  /billing-account/admin/resources:
+    get:
+      tags: [Resources]
+      summary: List resources
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Resource"
+
+  /billing-account/admin/resources/{id}:
+    delete:
+      tags: [Resources]
+      summary: Delete resource
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /billing-account/admin/resources/{id}/published:
+    patch:
+      tags: [Resources]
+      summary: Publish or unpublish resource
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: is_published
+          in: query
+          required: true
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+
+  /billing-account/admin/plans:
+    get:
+      tags: [Plans]
+      summary: List plans
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plan"
+
+  /billing-account/admin/plan:
+    post:
+      tags: [Plans]
+      summary: Create plan
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Plan"
+            example:
+              name: Starter
+              description: Starter plan
+              is_free: false
+              is_published: false
+              internal: false
+              is_trial_eligible: true
+              trial_days: 14
+              is_configurator_template: false
+              resources:
+                - resource:
+                    id: 64b2f6b76f9c2a9f2d4f4d11
+                    name: Translation keys
+                    Type: translation_keys
+                    step: 1000
+                    is_published: true
+                  amount: 5
+              base_fee:
+                Value: 1000
+                Currencty: EUR
+              billing_period: monthly
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+
+  /billing-account/admin/plans/{id}:
+    get:
+      tags: [Plans]
+      summary: Get plan by ID
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+    put:
+      tags: [Plans]
+      summary: Update plan
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Plan"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+    delete:
+      tags: [Plans]
+      summary: Delete plan
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+
+  /billing-account/admin/plans/{id}/published:
+    patch:
+      tags: [Plans]
+      summary: Publish or unpublish plan
+      description: Requires admin or super_admin role.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: is_published
+          in: query
+          required: true
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+
+  /billing-account/owner-invitation:
+    post:
+      tags: [Billing Accounts]
+      summary: Invite billing account owner
+      description: Requires user role and billing account ownership.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InviteBillingAccountOwnerRequest"
+            example:
+              email: owner@example.com
+              billing_account_id: 64b2f6b76f9c2a9f2d4f4d10
+      responses:
+        "200":
+          description: Invitation created and email send scheduled
+        "400":
+          description: Invalid request or self-invitation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing-account/owner-invitation/{id}/accept:
+    post:
+      tags: [Billing Accounts]
+      summary: Accept billing account owner invitation
+      description: Requires user role. `{id}` is owner invitation ID. `code` is invitation code query parameter.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Invalid invitation ID, missing code, invalid code, or expired invitation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing-account/{id}/owner-invitations:
+    get:
+      tags: [Billing Accounts]
+      summary: List active owner invitations for billing account
+      description: Requires user role and billing account ownership.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OwnerInvitation"
+
+  /billing-account/{id}/invoices:
+    get:
+      tags: [Billing Accounts]
+      summary: List billing account invoices
+      description: Requires user role and billing account ownership.
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BillingInvoice"
+
+  /deepl/translate/{id}:
+    put:
+      tags: [DeepL]
+      summary: Translate key with DeepL
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /deepl/translate/{id}/{source}/{target}:
+    put:
+      tags: [DeepL]
+      summary: Retranslate key with DeepL
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: source
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: target
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /deepl/translate-multiple:
+    put:
+      tags: [DeepL]
+      summary: Translate multiple keys with DeepL
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranslationKey"
+        "206":
+          description: Partial Content
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranslationKey"
+        "500":
+          description: All translations failed
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /openrouter/models:
+    get:
+      tags: [OpenRouter]
+      summary: List OpenRouter models
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OpenRouterModel"
+
+  /openrouter/translate/{id}:
+    put:
+      tags: [OpenRouter]
+      summary: Translate key with OpenRouter
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranslateSingleRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /openrouter/translate/{id}/{source}/{target}:
+    put:
+      tags: [OpenRouter]
+      summary: Retranslate key with OpenRouter
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: source
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: target
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranslateSingleRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranslationKey"
+
+  /openrouter/translate-batch:
+    post:
+      tags: [OpenRouter]
+      summary: Translate batch with OpenRouter
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranslateBatchRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranslationKey"
+        "206":
+          description: Partial Content
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TranslationKey"
+        "500":
+          description: All translations failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /project/{projectId}/ai-settings/:
+    get:
+      tags: [AI Settings]
+      summary: Get project AI settings
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAISettings"
+    post:
+      tags: [AI Settings]
+      summary: Create project AI settings
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectAISettings"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAISettings"
+    put:
+      tags: [AI Settings]
+      summary: Update project AI settings
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAISettingsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAISettings"
+    delete:
+      tags: [AI Settings]
+      summary: Delete project AI settings
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+
+  /project/{projectId}/ai-settings/model/{langCode}:
+    put:
+      tags: [AI Settings]
+      summary: Set language model
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: langCode
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetLanguageModelRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAISettings"
+    delete:
+      tags: [AI Settings]
+      summary: Remove language model
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: langCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAISettings"
+
+  /statistics/project/{projectId}:
+    get:
+      tags: [Statistics]
+      summary: Get project statistics
+      security:
+        - ApiKeyAuth: []
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStatistics"
+
+  /sdk/translations/manifest:
+    get:
+      tags: [SDK]
+      summary: Get SDK manifest
+      description: |
+        Rate limited to 60 requests per minute per IP. Requires `X-OTA-Publish-Id`.
+        Migration: replaces `GET /sdk/projects/{projectId}/translations/...` + `X-API-Key`.
+      security:
+        - OTAPublishIdAuth: []
+      parameters:
+        - name: X-OTA-Publish-Id
+          in: header
+          required: true
+          schema:
+            type: string
+          example: ota_publish_live_01j9q4m4f6q6phx9tx2awzv2vp
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Optional ETag for conditional requests.
+        - name: platform
+          in: query
+          schema:
+            type: string
+            default: flutter
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: ETag for conditional requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManifestResponse"
+              example:
+                version: 12
+                locales:
+                  en:
+                    version: 8
+                    url: "https://api.rerune.com/api/sdk/translations/flutter/en"
+                  de:
+                    version: 6
+                    url: "https://api.rerune.com/api/sdk/translations/flutter/de"
+        "304":
+          description: Not Modified
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: ETag for the current manifest.
+        "401":
+          description: Unauthorized (missing, invalid, or expired OTA publish ID)
+          content:
+            text/plain:
+              schema:
+                type: string
+        "403":
+          description: SDK quota exceeded
+          content:
+            text/plain:
+              schema:
+                type: string
+        "429":
+          description: Too many requests
+          headers:
+            Retry-After:
+              schema:
+                type: string
+              description: Seconds until another request is allowed.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /sdk/translations/{platform}/{locale}:
+    get:
+      tags: [SDK]
+      summary: Get SDK locale file
+      description: Rate limited to 60 requests per minute per IP. Requires `X-OTA-Publish-Id`.
+      security:
+        - OTAPublishIdAuth: []
+      parameters:
+        - name: X-OTA-Publish-Id
+          in: header
+          required: true
+          schema:
+            type: string
+          example: ota_publish_live_01j9q4m4f6q6phx9tx2awzv2vp
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Optional ETag for conditional requests.
+        - name: platform
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: locale
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: ETag for conditional requests.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: Not Modified
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: ETag for the current locale file.
+        "401":
+          description: Unauthorized (missing, invalid, or expired OTA publish ID)
+          content:
+            text/plain:
+              schema:
+                type: string
+        "403":
+          description: SDK quota exceeded
+          content:
+            text/plain:
+              schema:
+                type: string
+        "429":
+          description: Too many requests
+          headers:
+            Retry-After:
+              schema:
+                type: string
+              description: Seconds until another request is allowed.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    OTAPublishIdAuth:
+      type: apiKey
+      in: header
+      name: X-OTA-Publish-Id
+      description: OTA publish ID used by SDK routes.
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    RegisterRequest:
+      type: object
+      required: [email, password, first_name, last_name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+
+    RegisterResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        user_id:
+          type: string
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    VerifyEmailRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+        token_type:
+          type: string
+
+    RequestResetPayload:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    CompleteResetPayload:
+      type: object
+      required: [request_id, token, new_password]
+      properties:
+        request_id:
+          type: string
+        token:
+          type: string
+        new_password:
+          type: string
+
+    NewsletterSubscribeRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        selected_organisation_id:
+          type: string
+        latest_projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        integration_configs:
+          type: array
+          items:
+            $ref: "#/components/schemas/IntegrationConfig"
+        api_keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiKey"
+
+    SelectedOrganisationRequest:
+      type: object
+      required: [selected_organisation_id]
+      properties:
+        selected_organisation_id:
+          type: string
+
+    ProfileUpdateRequest:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        value:
+          type: string
+
+    ApiKeyCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    IntegrationConfig:
+      type: object
+      properties:
+        id:
+          type: string
+        api_key:
+          type: string
+        last_activated:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+        settings:
+          type: object
+          additionalProperties: true
+
+    Organisation:
+      type: object
+      properties:
+        id:
+          type: string
+        billing_account_id:
+          type: string
+        name:
+          type: string
+        owner:
+          $ref: "#/components/schemas/User"
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        invited_emails:
+          type: array
+          items:
+            type: string
+            format: email
+        default:
+          type: boolean
+
+    CreateOrganisationRequest:
+      type: object
+      required: [name, billing_account_id]
+      properties:
+        name:
+          type: string
+        billing_account_id:
+          type: string
+
+    Language:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        main:
+          type: boolean
+        version:
+          type: integer
+
+    OTAPublishedID:
+      type: object
+      properties:
+        id:
+          type: string
+          description: MongoDB ObjectID
+        value:
+          type: string
+          description: Masked value in project responses; always returned as "****".
+          example: "****"
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional expiration time. Null or absent means non-expiring.
+
+    CreateOTAPublishedIDRequest:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional expiration time. Null or absent means non-expiring.
+
+    CreateOTAPublishedIDResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: MongoDB ObjectID
+        value:
+          type: string
+          description: Plaintext OTA publish ID, returned only once during creation.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Optional expiration time. Null or absent means non-expiring.
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        organisation_id:
+          type: string
+        billing_account_id:
+          type: string
+        name:
+          type: string
+        notes:
+          type: string
+        description:
+          type: string
+        guidelines:
+          type: string
+        type:
+          type: string
+          enum: [personal, organisation]
+        owner:
+          $ref: "#/components/schemas/User"
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Language"
+        ota_published_ids:
+          type: array
+          description: OTA publish IDs for SDK access. Values are masked in project responses.
+          items:
+            $ref: "#/components/schemas/OTAPublishedID"
+        version:
+          type: integer
+
+    CreateProjectRequest:
+      type: object
+      required: [organisation_id, name]
+      properties:
+        organisation_id:
+          type: string
+        name:
+          type: string
+        notes:
+          type: string
+        description:
+          type: string
+        guidelines:
+          type: string
+        type:
+          type: string
+          enum: [personal, organisation]
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Language"
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        notes:
+          type: string
+        description:
+          type: string
+        guidelines:
+          type: string
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Language"
+
+    ProjectUserPreference:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        project_id:
+          type: string
+        preview_language:
+          type: string
+        retranslate_source_language:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateProjectPreferenceRequest:
+      type: object
+      properties:
+        preview_language:
+          type: string
+        retranslate_source_language:
+          type: string
+
+    UpdateProjectPreferenceRequest:
+      type: object
+      properties:
+        preview_language:
+          type: string
+          nullable: true
+        retranslate_source_language:
+          type: string
+          nullable: true
+
+    TranslationValue:
+      type: object
+      properties:
+        lang:
+          type: string
+        value:
+          type: string
+        message:
+          $ref: "#/components/schemas/MessageValue"
+
+    MessageValue:
+      type: object
+      properties:
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessagePart"
+
+    MessagePart:
+      type: object
+      properties:
+        text:
+          type: string
+        arg:
+          $ref: "#/components/schemas/ArgumentRef"
+        variant:
+          $ref: "#/components/schemas/VariantBlock"
+
+    ArgumentRef:
+      type: object
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+        style:
+          type: string
+
+    VariantBlock:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [plural, select, choice]
+        variable:
+          type: string
+        offset:
+          type: integer
+          format: int64
+        forms:
+          type: array
+          items:
+            $ref: "#/components/schemas/VariantForm"
+
+    VariantForm:
+      type: object
+      properties:
+        selector:
+          type: string
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessagePart"
+        order:
+          type: integer
+          format: int64
+
+    Placeholder:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        order:
+          type: integer
+          format: int64
+        type:
+          type: string
+        format:
+          type: string
+
+    PlaceholderDescription:
+      type: object
+      properties:
+        text:
+          type: string
+
+    KeyMetadata:
+      type: object
+      properties:
+        description:
+          type: string
+        comment:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    TranslationKey:
+      type: object
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        type:
+          type: string
+          enum: [object, array, key]
+        translationKeys:
+          type: array
+          items:
+            $ref: "#/components/schemas/TranslationKey"
+        key:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: "#/components/schemas/TranslationValue"
+        placeholders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Placeholder"
+        placeholder_description:
+          type: string
+        enabled:
+          type: boolean
+        order:
+          type: integer
+          format: int64
+        metadata:
+          $ref: "#/components/schemas/KeyMetadata"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Dictionary:
+      type: object
+      properties:
+        id:
+          type: string
+        value:
+          type: string
+        description:
+          type: string
+        project_id:
+          type: string
+
+    Platform:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        default_path:
+          type: string
+        has_lang_dir:
+          type: boolean
+        lang_dir_prefix:
+          type: string
+        lang_dir_suffix:
+          type: string
+        lang_dir_separator:
+          type: string
+        lang_code_as_prefix:
+          type: boolean
+        single_file:
+          type: boolean
+
+    CliVersion:
+      type: object
+      properties:
+        major:
+          type: integer
+        minor:
+          type: integer
+        patch:
+          type: integer
+        latest:
+          type: boolean
+        mandatory:
+          type: boolean
+
+    CodecImportRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+
+    FileResponse:
+      type: object
+      properties:
+        filename:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+        base64:
+          type: string
+
+    Integration:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        url:
+          type: string
+        logo_url:
+          type: string
+        enabled:
+          type: boolean
+        tag:
+          type: string
+        implementation:
+          type: string
+        needs_setup:
+          type: boolean
+        setup_type:
+          type: string
+
+    PriceEmbedd:
+      type: object
+      properties:
+        Value:
+          type: integer
+          format: int64
+        Currencty:
+          type: string
+          enum: [EUR, USD, GBP, CHF, CAD, CNY, JPY, ALL, KRW, HKD, TWD, SGD, INR]
+
+    Resource:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        Type:
+          type: string
+          enum: [translation_keys, sdk_quota]
+        price:
+          $ref: "#/components/schemas/PriceEmbedd"
+        step:
+          type: integer
+        is_published:
+          type: boolean
+        created_by:
+          type: string
+        updated_by:
+          type: string
+
+    ResourceEmbedd:
+      type: object
+      properties:
+        resource:
+          $ref: "#/components/schemas/Resource"
+        amount:
+          type: integer
+          format: int64
+        stripe_subscription_id:
+          type: string
+        stripe_subscription_status:
+          type: string
+        BillingPeriod:
+          type: string
+          enum: [monthly, annual]
+        stripe_product:
+          $ref: "#/components/schemas/StripeProductEmbedd"
+
+    Plan:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        is_free:
+          type: boolean
+        is_published:
+          type: boolean
+        internal:
+          type: boolean
+        is_configurator_template:
+          type: boolean
+        is_trial_eligible:
+          type: boolean
+        trial_days:
+          type: integer
+          format: int64
+        resources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResourceEmbedd"
+        base_fee:
+          $ref: "#/components/schemas/PriceEmbedd"
+        discount_yearly:
+          type: number
+          format: double
+        discount_monthly:
+          type: number
+          format: double
+        stripe_subscription_id:
+          type: string
+        stripe_subscription_status:
+          type: string
+        billing_period:
+          type: string
+          enum: [monthly, annual]
+        stripe_product:
+          $ref: "#/components/schemas/StripeProductEmbedd"
+        created_by:
+          type: string
+        updated_by:
+          type: string
+
+    StripeProductEmbedd:
+      type: object
+      properties:
+        product_id:
+          type: string
+        item_id:
+          type: string
+        montly_price_id:
+          type: string
+        annual_price_id:
+          type: string
+
+    BillingAccount:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        owners:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserEmbedd"
+        plan:
+          $ref: "#/components/schemas/Plan"
+        addons:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResourceEmbedd"
+        entitlement_change_id:
+          type: string
+        stripe_customer_id:
+          type: string
+        trial_used:
+          type: boolean
+        trial_ends_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        updated_by:
+          type: string
+
+    UserEmbedd:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+
+    CheckoutOrResultResponse:
+      type: object
+      properties:
+        billing_account:
+          $ref: "#/components/schemas/BillingAccount"
+        plan:
+          $ref: "#/components/schemas/Plan"
+        resources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResourceEmbedd"
+        needs_checkout:
+          type: boolean
+        checkout_url:
+          type: string
+
+    OwnerInvitation:
+      type: object
+      properties:
+        id:
+          type: string
+        billing_account_id:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserEmbedd"
+        invitation_expires_at:
+          type: string
+          format: date-time
+        invitation_code:
+          type: string
+        created_by:
+          type: string
+        updated_by:
+          type: string
+
+    BillingInvoice:
+      type: object
+      properties:
+        id:
+          type: string
+        billing_account_id:
+          type: string
+        plan_id:
+          type: string
+        external_id:
+          type: string
+        hosted_invoice_url:
+          type: string
+        amount:
+          type: integer
+        currentcy:
+          type: string
+          enum: [EUR, USD, GBP, CHF, CAD, CNY, JPY, ALL, KRW, HKD, TWD, SGD, INR]
+        status:
+          type: string
+          enum: [draft, open, paid, void, uncollectible]
+        issued_at:
+          type: string
+          format: date-time
+        due_at:
+          type: string
+          format: date-time
+        paid_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        updated_by:
+          type: string
+
+    CreateBillingAccountRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Name of the billing account
+
+    InviteBillingAccountOwnerRequest:
+      type: object
+      required: [email, billing_account_id]
+      properties:
+        email:
+          type: string
+        billing_account_id:
+          type: string
+
+    PortalSessionResponse:
+      type: object
+      properties:
+        portal_url:
+          type: string
+
+    OpenRouterModelPricing:
+      type: object
+      properties:
+        prompt:
+          type: string
+        completion:
+          type: string
+
+    OpenRouterModel:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        context_length:
+          type: integer
+        pricing:
+          $ref: "#/components/schemas/OpenRouterModelPricing"
+
+    TranslationResult:
+      type: object
+      properties:
+        language_code:
+          type: string
+        translation:
+          type: string
+
+    TranslationContext:
+      type: object
+      properties:
+        project_context:
+          type: string
+        key_description:
+          type: string
+        key_comment:
+          type: string
+        placeholder_info:
+          type: string
+        placeholders:
+          type: array
+          items:
+            type: string
+        translation_style:
+          type: string
+        source_language:
+          type: string
+        target_languages:
+          type: array
+          items:
+            type: string
+
+    TranslateSingleRequest:
+      type: object
+      properties:
+        model:
+          type: string
+
+    TranslateBatchRequest:
+      type: object
+      properties:
+        key_ids:
+          type: array
+          items:
+            type: string
+        model:
+          type: string
+        batch_size:
+          type: integer
+
+    AIModelSetting:
+      type: object
+      properties:
+        provider:
+          type: string
+        model_id:
+          type: string
+        model_name:
+          type: string
+
+    LanguageModelConfig:
+      type: object
+      properties:
+        language_code:
+          type: string
+        model:
+          $ref: "#/components/schemas/AIModelSetting"
+
+    ProjectAISettings:
+      type: object
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        default_model:
+          $ref: "#/components/schemas/AIModelSetting"
+        language_models:
+          type: array
+          items:
+            $ref: "#/components/schemas/LanguageModelConfig"
+        project_context:
+          type: string
+        translation_style:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UpdateAISettingsRequest:
+      type: object
+      properties:
+        default_model:
+          $ref: "#/components/schemas/AIModelSetting"
+        project_context:
+          type: string
+        translation_style:
+          type: string
+
+    SetLanguageModelRequest:
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/AIModelSetting"
+
+    ProjectStatistics:
+      type: object
+      properties:
+        project_id:
+          type: string
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LanguageStatistics"
+
+    LanguageStatistics:
+      type: object
+      properties:
+        language_code:
+          type: string
+        language_name:
+          type: string
+        total_keys:
+          type: integer
+          format: int64
+        completed_keys:
+          type: integer
+          format: int64
+        completed_percent:
+          type: number
+          format: double
+
+    ManifestLocale:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int64
+        url:
+          type: string
+
+    ManifestResponse:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int64
+        locales:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ManifestLocale"

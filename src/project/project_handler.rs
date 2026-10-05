@@ -8,7 +8,7 @@ use crate::{
     },
     EmptyResult,
 };
-use std::{error::Error, fs};
+use std::{error::Error, fs, path::Path};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavedRequestInfo {
@@ -73,40 +73,46 @@ pub fn read_saved_rest_request(name: &str) -> Result<GemonRestRequest, Box<dyn E
         message: String::from("Project not found!"),
     })?;
 
-    let request_type = fs::read_to_string(format!("{name}/.marker"))?;
+    read_saved_rest_request_from(Path::new("."), name)
+}
+
+pub(crate) fn read_saved_rest_request_from(
+    root: &Path,
+    name: &str,
+) -> Result<GemonRestRequest, Box<dyn Error>> {
+    let request_path = root.join(name);
+    let request_type = fs::read_to_string(request_path.join(".marker"))?;
     if request_type.trim() != "REST" {
         return Err(Box::new(ProjectError {
             message: format!("Saved request '{name}' is not a REST request"),
         }));
     }
 
-    let metadata_json = fs::read_to_string(format!("{name}/metadata.json"))?;
-    let body = fs::read_to_string(format!("{name}/body.json")).ok();
+    let metadata_json = fs::read_to_string(request_path.join("metadata.json"))?;
+    let body = fs::read_to_string(request_path.join("body.json")).ok();
     let mut request: GemonRestRequest = serde_json::from_str(&metadata_json)?;
     request.set_body(body);
     Ok(request)
 }
 
-pub fn save_request(request: Box<impl GemonRequest>, name: &String) -> Box<impl GemonRequest> {
+pub fn save_request(request: Box<impl GemonRequest>, name: &str) -> Box<impl GemonRequest> {
     validate_prject();
-    let json_metadata = request.json_metadata();
-    let json_body = request.json_body();
-    let request_type_marker = request.request_type();
-    if let Err(err) = fs::read_dir(name) {
-        match err.kind() {
-            std::io::ErrorKind::NotFound => fs::create_dir(name).expect("Create dir failed!"),
-            std::io::ErrorKind::PermissionDenied => {
-                panic!("User does not have permissions to write to dir!")
-            }
-            _ => panic!("Error while trying to create dir for the request!"),
-        };
-    }
-    fs::write(format!("{}/metadata.json", name), json_metadata)
-        .expect("Could not create metadata file!");
-    fs::write(format!("{}/body.json", name), json_body).expect("Could not create body file!");
-    fs::write(format!("{}/.marker", name), request_type_marker)
-        .expect("Failed to mark request dir");
+    save_request_to_project(Path::new("."), request.as_ref(), name)
+        .expect("Could not save request into project");
     request
+}
+
+pub(crate) fn save_request_to_project(
+    root: &Path,
+    request: &impl GemonRequest,
+    name: &str,
+) -> EmptyResult {
+    let request_dir = root.join(name);
+    fs::create_dir_all(&request_dir)?;
+    fs::write(request_dir.join("metadata.json"), request.json_metadata())?;
+    fs::write(request_dir.join("body.json"), request.json_body())?;
+    fs::write(request_dir.join(".marker"), request.request_type())?;
+    Ok(())
 }
 
 pub fn get_request(name: &String) -> Box<impl GemonRequest> {
